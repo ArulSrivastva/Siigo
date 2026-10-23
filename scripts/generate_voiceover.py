@@ -1,9 +1,9 @@
 """
-Automated Voiceover Generator for Siigo Live Demo Video
-Paced & timed down to the exact millisecond to match the 1080p video recording.
-Assembles:
-1. Individual scene WAV tracks: 01_setup through 07_payoff
-2. A single continuous, frame-exact master track: synced_video_master_voiceover.wav (111.72 seconds)
+Automated Voiceover Generator for Siigo Live Demo Video (with Executive Pitch Intro)
+Synthesizes:
+1. Executive Problem & Solution Pitch Intro (0:00 - 0:48)
+2. Live Interactive Walkthrough Scenes (0:48 - 2:40)
+Assembles a frame-exact master audio track: synced_video_master_voiceover.wav (160.0 seconds).
 """
 import os
 import wave
@@ -13,12 +13,28 @@ WORKSPACE = os.path.dirname(os.path.dirname(__file__))
 VOICEOVER_DIR = os.path.join(WORKSPACE, "voiceover")
 os.makedirs(VOICEOVER_DIR, exist_ok=True)
 
-# Scene scripts and their exact target start timestamp in the 111.72s video
+# Scene scripts and their exact target start timestamp in the 160s video
 SCENE_CONFIG = [
     {
-        "id": "01_setup_problem",
+        "id": "00_intro_pitch",
         "start_sec": 0.8,
-        "title": "Business Problem Setup",
+        "title": "Executive Pitch & Problem Framing",
+        "text": (
+            "The biggest problem small businesses face is that too much critical information depends on one person. "
+            "When that person becomes unavailable, important commitments get lost in chats and documents, "
+            "and others are left confused about what to do and what they are allowed to do. "
+            "Hello everyone, here I present to you Siigo. "
+            "We are building a business continuity system that captures important commitments from business conversations, "
+            "verifies them against their original evidence, and turns them into actionable handoffs for the next person. "
+            "It also enforces authority limits, helping prevent unauthorized actions. "
+            "With Siigo, even when a key person is unavailable, the business can keep moving safely. "
+            "Let us watch the live demo."
+        )
+    },
+    {
+        "id": "01_setup_problem",
+        "start_sec": 48.5,
+        "title": "Maya & Rajesh Setup",
         "text": (
             "Maya owns the business, and Rajesh must cover for her tomorrow. "
             "Instead of asking Rajesh to search through messages and guess what matters, "
@@ -27,7 +43,7 @@ SCENE_CONFIG = [
     },
     {
         "id": "02_walkthrough_run",
-        "start_sec": 17.0,
+        "start_sec": 64.5,
         "title": "Running Complete Walkthrough",
         "text": (
             "Let us run the complete walkthrough. "
@@ -37,7 +53,7 @@ SCENE_CONFIG = [
     },
     {
         "id": "03_evidence_grounding",
-        "start_sec": 34.0,
+        "start_sec": 81.5,
         "title": "Evidence Grounding & Transparency",
         "text": (
             "In the handoff, we see the immediate commitment for Sharma Prints, "
@@ -47,7 +63,7 @@ SCENE_CONFIG = [
     },
     {
         "id": "04_financial_limit_deny",
-        "start_sec": 50.0,
+        "start_sec": 97.5,
         "title": "Financial Policy Gate Deny",
         "text": (
             "Now look at the financial boundary in Column three. "
@@ -57,7 +73,7 @@ SCENE_CONFIG = [
     },
     {
         "id": "05_permitted_request_allow",
-        "start_sec": 68.0,
+        "start_sec": 115.5,
         "title": "Permitted Action Authorization",
         "text": (
             "In contrast, look at an authorized request: "
@@ -68,7 +84,7 @@ SCENE_CONFIG = [
     },
     {
         "id": "06_human_oversight",
-        "start_sec": 86.0,
+        "start_sec": 133.5,
         "title": "Evidence Review Queue & Human Control",
         "text": (
             "In the Evidence Review Queue, human oversight is enforced. "
@@ -78,16 +94,15 @@ SCENE_CONFIG = [
     },
     {
         "id": "07_closing_payoff",
-        "start_sec": 102.0,
+        "start_sec": 149.5,
         "title": "Closing Payoff",
         "text": (
-            "Siigo preserves context, surfaces commitments, exposes gaps, "
-            "and lets the business keep moving within safe limits."
+            "With Siigo, the business keeps moving safely without pretending the system knows everything. Thank you."
         )
     }
 ]
 
-VIDEO_TOTAL_SECONDS = 111.72
+VIDEO_TOTAL_SECONDS = 160.0
 
 def generate_scene_voiceovers():
     print("=" * 70)
@@ -95,12 +110,11 @@ def generate_scene_voiceovers():
     print("=" * 70)
 
     engine = pyttsx3.init()
-    engine.setProperty("rate", 160)
+    engine.setProperty("rate", 158)
 
-    # Queue all speech outputs
     for s in SCENE_CONFIG:
         path = os.path.join(VOICEOVER_DIR, f"{s['id']}.wav")
-        print(f"[*] Queuing: {s['id']}.wav (Target video start: {s['start_sec']}s)")
+        print(f"[*] Queuing: {s['id']}.wav (Target start: {s['start_sec']}s)")
         engine.save_to_file(s["text"], path)
 
     engine.runAndWait()
@@ -108,7 +122,7 @@ def generate_scene_voiceovers():
 
 def assemble_master_track():
     print("=" * 70)
-    print(f"2. ASSEMBLING FRAME-EXACT MASTER AUDIO TRACK ({VIDEO_TOTAL_SECONDS:.2f}s)")
+    print(f"2. ASSEMBLING MASTER AUDIO TRACK ({VIDEO_TOTAL_SECONDS:.1f}s)")
     print("=" * 70)
 
     sample_rate = 22050
@@ -117,7 +131,6 @@ def assemble_master_track():
     bytes_per_second = sample_rate * channels * sample_width
     total_expected_bytes = int(VIDEO_TOTAL_SECONDS * bytes_per_second)
 
-    # Initialize complete master buffer with silence (0x00)
     master_buffer = bytearray(total_expected_bytes)
 
     for s in SCENE_CONFIG:
@@ -130,17 +143,14 @@ def assemble_master_track():
         start_byte = int(s["start_sec"] * bytes_per_second)
         end_byte = start_byte + len(frames)
 
-        # Place into master buffer
         if end_byte <= total_expected_bytes:
             master_buffer[start_byte:end_byte] = frames
-            print(f"  + Injected {s['id']:25s} | Start: {s['start_sec']:5.1f}s | Duration: {duration_s:4.1f}s")
+            print(f"  + Injected {s['id']:28s} | Start: {s['start_sec']:5.1f}s | Duration: {duration_s:4.1f}s")
         else:
-            # Clip if beyond video bounds
             avail = total_expected_bytes - start_byte
             master_buffer[start_byte:total_expected_bytes] = frames[:avail]
-            print(f"  + Injected (clipped) {s['id']:25s} | Start: {s['start_sec']:5.1f}s")
+            print(f"  + Injected (clipped) {s['id']:28s} | Start: {s['start_sec']:5.1f}s")
 
-    # Write out master track
     master_path = os.path.join(VOICEOVER_DIR, "synced_video_master_voiceover.wav")
     with wave.open(master_path, "wb") as w:
         w.setnchannels(channels)
@@ -148,7 +158,6 @@ def assemble_master_track():
         w.setframerate(sample_rate)
         w.writeframes(bytes(master_buffer))
 
-    # Also update full_3min_voiceover.wav with this master track
     compat_path = os.path.join(VOICEOVER_DIR, "full_3min_voiceover.wav")
     with wave.open(compat_path, "wb") as w:
         w.setnchannels(channels)
@@ -160,7 +169,7 @@ def assemble_master_track():
     print("=" * 70)
     print(f"MASTER TRACK CREATED: {size_mb:.2f} MB")
     print(f"Location: {master_path}")
-    print(f"Total Duration: {VIDEO_TOTAL_SECONDS:.2f} seconds (100% video-synchronized)")
+    print(f"Total Duration: {VIDEO_TOTAL_SECONDS:.1f} seconds")
     print("=" * 70)
 
 if __name__ == "__main__":

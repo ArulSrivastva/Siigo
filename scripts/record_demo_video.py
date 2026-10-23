@@ -1,7 +1,14 @@
 """
 High-Fidelity Automated Video Recorder with Visible Animated Cursor
-Paces video recording to match the 2m 30s - 2m 45s voiceover narration.
-Renders an amber beacon pointer cursor with click pulses and realistic human pacing.
+Paced exactly to match the 160-second synchronized master timeline:
+- Scene 0 (0:00 - 0:48, 48s): Continuity Overview Dashboard (Intro Pitch)
+- Scene 1 (0:48 - 1:04, 16s): Transition to Alexa+ Live Simulation & Setup
+- Scene 2 (1:04 - 1:21, 17s): Run Autonomous Walkthrough Pipeline
+- Scene 3 (1:21 - 1:37, 16s): Evidence Grounding & Safe Handoff
+- Scene 4 (1:37 - 1:55, 18s): Authority Gate Denial (₹65,000 Over-Limit)
+- Scene 5 (1:55 - 2:13, 18s): Permitted Action Authorization (₹18,000 Allow)
+- Scene 6 (2:13 - 2:29, 16s): Human Oversight in Evidence Review Queue
+- Scene 7 (2:29 - 2:40, 11s): Closing Payoff & Continuity Guarantee
 """
 import os
 import time
@@ -27,7 +34,7 @@ CURSOR_INJECTION_SCRIPT = """
             width: 32px; height: 32px;
             z-index: 2147483647;
             pointer-events: none;
-            transform: translate(250px, 150px);
+            transform: translate(350px, 200px);
             transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
             filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
           ">
@@ -75,36 +82,42 @@ CURSOR_INJECTION_SCRIPT = """
 """
 
 def move_cursor_to_element(page, selector, offset_x=0, offset_y=0, wait_after=1.0):
-    loc = page.locator(selector).first
-    if loc.is_visible():
-        loc.scroll_into_view_if_needed()
-        box = loc.bounding_box()
-        if box:
-            x = box["x"] + box["width"] / 2 + offset_x
-            y = box["y"] + box["height"] / 2 + offset_y
-            page.evaluate(f"window.__moveCursor({x}, {y})")
-            page.wait_for_timeout(int(wait_after * 1000))
-            return x, y
+    try:
+        loc = page.locator(selector).first
+        if loc.is_visible():
+            loc.scroll_into_view_if_needed()
+            box = loc.bounding_box()
+            if box:
+                x = box["x"] + box["width"] / 2 + offset_x
+                y = box["y"] + box["height"] / 2 + offset_y
+                page.evaluate(f"window.__moveCursor({x}, {y})")
+                page.wait_for_timeout(int(wait_after * 1000))
+                return x, y
+    except Exception as e:
+        pass
     return None, None
 
 def click_element_with_cursor(page, selector, wait_before=0.5, wait_after=1.5):
-    loc = page.locator(selector).first
-    loc.scroll_into_view_if_needed()
-    box = loc.bounding_box()
-    if box:
-        x = box["x"] + box["width"] / 2
-        y = box["y"] + box["height"] / 2
-        page.evaluate(f"window.__moveCursor({x}, {y})")
-        page.wait_for_timeout(int(wait_before * 1000))
-        page.evaluate(f"window.__clickPulse({x}, {y})")
-        loc.click()
-        page.wait_for_timeout(int(wait_after * 1000))
-        return True
+    try:
+        loc = page.locator(selector).first
+        loc.scroll_into_view_if_needed()
+        box = loc.bounding_box()
+        if box:
+            x = box["x"] + box["width"] / 2
+            y = box["y"] + box["height"] / 2
+            page.evaluate(f"window.__moveCursor({x}, {y})")
+            page.wait_for_timeout(int(wait_before * 1000))
+            page.evaluate(f"window.__clickPulse({x}, {y})")
+            loc.click()
+            page.wait_for_timeout(int(wait_after * 1000))
+            return True
+    except Exception as e:
+        pass
     return False
 
 def record_live_demo():
     print("=" * 70, flush=True)
-    print("STARTING HIGH-FIDELITY SCREEN RECORDING WITH VISIBLE CURSOR (1080p)", flush=True)
+    print("STARTING 160-SECOND SYNCHRONIZED DEMO RECORDING (1080p)", flush=True)
     print("=" * 70, flush=True)
 
     with sync_playwright() as p:
@@ -118,148 +131,173 @@ def record_live_demo():
         page.add_init_script(CURSOR_INJECTION_SCRIPT)
 
         # ---------------------------------------------------------------------
-        # Scene 1: Initial Setup & Business Problem (0:00 - 0:16, ~16s)
-        # Matches 01_setup_problem.wav (12.7s)
+        # Scene 0: Pitch & Continuity Overview (0:00 - 0:48, 48s)
+        # Matches 00_intro_pitch.wav (47.4s)
         # ---------------------------------------------------------------------
-        print("[0:00] Scene 1: Loading Siigo Command Center...", flush=True)
+        print("[0:00] Scene 0: Loading Continuity Overview Dashboard...", flush=True)
         page.goto("http://localhost:3000", wait_until="networkidle")
-        page.wait_for_timeout(2000)
+        page.wait_for_timeout(1000)
+
+        # Ensure we are on Overview tab
+        click_element_with_cursor(page, "button:has-text('Continuity Overview')", wait_before=0.3, wait_after=1.5)
+
+        print("[0:05] Showing main value proposition...", flush=True)
+        move_cursor_to_element(page, "text=Your business, still moving.", wait_after=4.0)
+
+        print("[0:12] Highlighting Continuity Readiness Score...", flush=True)
+        move_cursor_to_element(page, "text=Continuity Score", wait_after=5.0)
+        move_cursor_to_element(page, "text=82%", wait_after=5.0)
+
+        print("[0:24] Pointing out single points of failure (Maya Sundaram)...", flush=True)
+        move_cursor_to_element(page, "text=Key Person Concentration", wait_after=5.0)
+        move_cursor_to_element(page, "text=Maya Sundaram", wait_after=6.0)
+
+        print("[0:36] Pointing to Fragility metrics and authority limits...", flush=True)
+        move_cursor_to_element(page, "text=Financial Ceiling", wait_after=4.0)
+        move_cursor_to_element(page, "text=INR 25,000", wait_after=4.0)
+
+        print("[0:44] Gliding cursor towards sidebar 'Alexa+ Live Simulation'...", flush=True)
+        move_cursor_to_element(page, "button:has-text('Alexa+ Live Simulation')", wait_after=3.5)
+
+        # ---------------------------------------------------------------------
+        # Scene 1: Transition to Live Simulation & Setup (0:48 - 1:04, 16s)
+        # Matches 01_setup_problem.wav (13.0s)
+        # ---------------------------------------------------------------------
+        print("[0:48] Scene 1: Clicking into Alexa+ Live Simulation...", flush=True)
+        click_element_with_cursor(page, "button:has-text('Alexa+ Live Simulation')", wait_before=0.3, wait_after=1.5)
 
         # Click Reset button to guarantee pristine state
-        print("       Resetting to pristine demo state...", flush=True)
+        print("[0:51] Resetting simulation environment...", flush=True)
         click_element_with_cursor(page, "button:has-text('Reset')", wait_before=0.4, wait_after=2.0)
 
-        # Move to Maya's absence utterance
-        print("[0:05] Hovering over Maya's absence instruction...", flush=True)
-        move_cursor_to_element(page, "text=I'm unavailable tomorrow. Identify anything that needs attention.", wait_after=3.5)
+        # Move to Maya's absence instruction
+        print("[0:55] Hovering over Maya's absence instruction...", flush=True)
+        move_cursor_to_element(page, "text=I'm unavailable tomorrow. Identify anything that needs attention.", wait_after=4.0)
 
         # Move to Tier 0 badge
-        print("[0:10] Pointing to Tier 0 Verified authentication badge...", flush=True)
-        move_cursor_to_element(page, "text=Tier 0 Verified", wait_after=3.0)
-
-        # Point to active actor dropdown
-        move_cursor_to_element(page, "select", wait_after=3.0)
+        print("[1:00] Pointing to Tier 0 Verified authentication badge...", flush=True)
+        move_cursor_to_element(page, "text=Tier 0 Verified", wait_after=3.5)
 
         # ---------------------------------------------------------------------
-        # Scene 2: Run Complete Walkthrough (0:16 - 0:41, ~25s)
-        # Matches 02_walkthrough_run.wav (22.4s)
+        # Scene 2: Run Complete Walkthrough (1:04 - 1:21, 17s)
+        # Matches 02_walkthrough_run.wav (13.1s)
         # ---------------------------------------------------------------------
-        print("[0:16] Scene 2: Moving cursor to 'Run Complete Demo Walkthrough'...", flush=True)
+        print("[1:04] Scene 2: Moving cursor to 'Run Complete Demo Walkthrough'...", flush=True)
         move_cursor_to_element(page, "button:has-text('Run Complete Demo Walkthrough')", wait_after=1.5)
 
-        print("[0:18] Clicking 'Run Complete Demo Walkthrough'...", flush=True)
-        click_element_with_cursor(page, "button:has-text('Run Complete Demo Walkthrough')", wait_before=0.5, wait_after=1.0)
+        print("[1:06] Triggering autonomous walkthrough...", flush=True)
+        click_element_with_cursor(page, "button:has-text('Run Complete Demo Walkthrough')", wait_before=0.3, wait_after=1.0)
 
-        # Let the autonomous execution pipeline run
+        # Wait for the autonomous execution pipeline to complete
         print("       Waiting for Ingestion, Span Verifier & Alexa Output...", flush=True)
         page.wait_for_selector("text=Confirm order docket #4092 for Sharma Prints", timeout=30000)
-        page.wait_for_timeout(3000)
+        page.wait_for_timeout(2000)
 
         # Hover over Alexa output bubble
-        print("[0:30] Hovering over Alexa Spoken Response...", flush=True)
-        move_cursor_to_element(page, "text=ALEXA+ SPOKEN TRIAGE RESPONSE", wait_after=4.0)
-        move_cursor_to_element(page, "text=Absence recorded for tomorrow under your Continuity Charter", wait_after=6.0)
+        print("[1:14] Hovering over Alexa Spoken Response...", flush=True)
+        move_cursor_to_element(page, "text=ALEXA+ SPOKEN TRIAGE RESPONSE", wait_after=3.0)
+        move_cursor_to_element(page, "text=Absence recorded for tomorrow under your Continuity Charter", wait_after=4.0)
 
         # ---------------------------------------------------------------------
-        # Scene 3: Evidence Grounding & Safe Handoff (0:41 - 1:09, ~28s)
-        # Matches 03_evidence_grounding.wav (24.6s)
+        # Scene 3: Evidence Grounding & Safe Handoff (1:21 - 1:37, 16s)
+        # Matches 03_evidence_grounding.wav (13.5s)
         # ---------------------------------------------------------------------
-        print("[0:41] Scene 3: Gliding to Column 2: Safe Handoff Briefing...", flush=True)
-        move_cursor_to_element(page, "text=2. Safe Handoff Document", wait_after=2.0)
+        print("[1:21] Scene 3: Gliding to Column 2: Safe Handoff Briefing...", flush=True)
+        move_cursor_to_element(page, "text=2. Safe Handoff Document", wait_after=1.5)
 
         # Hover over Sharma Prints commitment
-        print("[0:45] Pointing to Sharma Prints commitment in Act Now...", flush=True)
-        move_cursor_to_element(page, "text=Confirm order docket #4092 for Sharma Prints", wait_after=5.0)
+        print("[1:23] Pointing to Sharma Prints commitment in Act Now...", flush=True)
+        move_cursor_to_element(page, "text=Confirm order docket #4092 for Sharma Prints", wait_after=3.5)
 
         # Point to exact verbatim quote
-        print("[0:52] Highlighting verbatim source quote substring...", flush=True)
-        move_cursor_to_element(page, "text=Order docket #4092 for Sharma Prints is confirmed", wait_after=4.0)
+        print("[1:27] Highlighting verbatim source quote substring...", flush=True)
+        move_cursor_to_element(page, "text=Order docket #4092 for Sharma Prints is confirmed", wait_after=3.5)
 
         # Point to quote SHA-256 hash badge
-        move_cursor_to_element(page, "text=SHA256:", wait_after=4.0)
+        move_cursor_to_element(page, "text=SHA256:", wait_after=2.5)
 
-        # Scroll down to What I Cannot See
-        print("[1:00] Scrolling to 'What I Cannot See' disclosures...", flush=True)
-        move_cursor_to_element(page, "text=What I Cannot See", wait_after=3.0)
-        move_cursor_to_element(page, "text=Personal non-exported WhatsApp chats", wait_after=5.0)
+        # Scroll to What I Cannot See
+        print("[1:33] Pointing to 'What I Cannot See' disclosures...", flush=True)
+        move_cursor_to_element(page, "text=What I Cannot See", wait_after=2.0)
+        move_cursor_to_element(page, "text=Personal non-exported WhatsApp chats", wait_after=2.0)
 
         # ---------------------------------------------------------------------
-        # Scene 4: Financial Boundary Denial (1:09 - 1:38, ~29s)
-        # Matches 04_financial_limit_deny.wav (25.9s)
+        # Scene 4: Financial Boundary Denial (1:37 - 1:55, 18s)
+        # Matches 04_financial_limit_deny.wav (15.1s)
         # ---------------------------------------------------------------------
-        print("[1:09] Scene 4: Moving to Column 3: Authority Gate Duel...", flush=True)
-        move_cursor_to_element(page, "text=3. Authority Gate Duel", wait_after=3.0)
+        print("[1:37] Scene 4: Moving to Column 3: Authority Gate Duel...", flush=True)
+        move_cursor_to_element(page, "text=3. Authority Gate Duel", wait_after=2.0)
 
         # Hover over Attack Test A button
-        print("[1:14] Pointing to 'Attack Test A — Over-Limit (INR 65,000)'...", flush=True)
-        move_cursor_to_element(page, "text=Over-Limit (₹65,000)", wait_after=4.0)
+        print("[1:40] Pointing to 'Attack Test A — Over-Limit (INR 65,000)'...", flush=True)
+        move_cursor_to_element(page, "text=Over-Limit (₹65,000)", wait_after=3.0)
 
         # Hover over the red DECISION: DENY card
-        print("[1:20] Inspecting DENY (HTTP 403) policy banner...", flush=True)
-        move_cursor_to_element(page, "text=DECISION: DENY", wait_after=5.0)
+        print("[1:44] Inspecting DENY (HTTP 403) policy banner...", flush=True)
+        move_cursor_to_element(page, "text=DECISION: DENY", wait_after=4.0)
 
         # Hover over ceiling explanation
-        print("[1:27] Pointing to ceiling explanation: exceeds INR 25,000...", flush=True)
-        move_cursor_to_element(page, "text=exceeds delegation ceiling", wait_after=5.0)
-        move_cursor_to_element(page, "text=STATUS: BLOCKED", wait_after=4.0)
+        print("[1:49] Pointing to ceiling explanation: exceeds INR 25,000...", flush=True)
+        move_cursor_to_element(page, "text=exceeds delegation ceiling", wait_after=3.5)
+        move_cursor_to_element(page, "text=STATUS: BLOCKED", wait_after=2.5)
 
         # ---------------------------------------------------------------------
-        # Scene 5: Permitted Request Authorization (1:38 - 2:08, ~30s)
-        # Matches 05_permitted_request_allow.wav (27.6s)
+        # Scene 5: Permitted Request Authorization (1:55 - 2:13, 18s)
+        # Matches 05_permitted_request_allow.wav (14.7s)
         # ---------------------------------------------------------------------
-        print("[1:38] Scene 5: Moving to 'Permitted Test B — Authorized (INR 18,000)'...", flush=True)
-        move_cursor_to_element(page, "text=Authorized (₹18,000)", wait_after=3.0)
+        print("[1:55] Scene 5: Moving to 'Permitted Test B — Authorized (INR 18,000)'...", flush=True)
+        move_cursor_to_element(page, "text=Authorized (₹18,000)", wait_after=2.5)
 
-        print("[1:43] Clicking 'Permitted Test B'...", flush=True)
-        click_element_with_cursor(page, "button:has-text('Authorized (₹18,000)')", wait_before=0.5, wait_after=2.0)
+        print("[1:58] Clicking 'Permitted Test B'...", flush=True)
+        click_element_with_cursor(page, "button:has-text('Authorized (₹18,000)')", wait_before=0.4, wait_after=1.5)
 
         # Verify ALLOW decision appears
-        print("[1:47] Inspecting ALLOW (HTTP 200) policy card...", flush=True)
+        print("[2:01] Inspecting ALLOW (HTTP 200) policy card...", flush=True)
         page.wait_for_selector("text=DECISION: ALLOW", timeout=10000)
-        move_cursor_to_element(page, "text=DECISION: ALLOW", wait_after=4.0)
+        move_cursor_to_element(page, "text=DECISION: ALLOW", wait_after=3.0)
 
         # Hover over status AUTHORIZED_AND_RECORDED
-        print("[1:54] Highlighting AUTHORIZED_AND_RECORDED state...", flush=True)
-        move_cursor_to_element(page, "text=STATUS: AUTHORIZED_AND_RECORDED", wait_after=6.0)
+        print("[2:05] Highlighting AUTHORIZED_AND_RECORDED state...", flush=True)
+        move_cursor_to_element(page, "text=STATUS: AUTHORIZED_AND_RECORDED", wait_after=3.5)
 
         # Hover over hash-chained audit trail
-        print("[2:02] Showing cryptographic hash-chained audit log...", flush=True)
-        move_cursor_to_element(page, "text=Hash-Chained Audit Trail", wait_after=5.0)
+        print("[2:09] Showing cryptographic hash-chained audit log...", flush=True)
+        move_cursor_to_element(page, "text=Hash-Chained Audit Trail", wait_after=3.5)
 
         # ---------------------------------------------------------------------
-        # Scene 6: Human Oversight in Evidence Review Queue (2:08 - 2:32, ~24s)
-        # Matches 06_human_oversight.wav (20.4s)
+        # Scene 6: Human Oversight in Evidence Review Queue (2:13 - 2:29, 16s)
+        # Matches 06_human_oversight.wav (12.2s)
         # ---------------------------------------------------------------------
-        print("[2:08] Scene 6: Navigating to Evidence Review Queue in sidebar...", flush=True)
-        move_cursor_to_element(page, "button:has-text('Evidence Review Queue')", wait_after=2.0)
-        click_element_with_cursor(page, "button:has-text('Evidence Review Queue')", wait_before=0.4, wait_after=2.0)
+        print("[2:13] Scene 6: Navigating to Evidence Review Queue in sidebar...", flush=True)
+        move_cursor_to_element(page, "button:has-text('Evidence Review Queue')", wait_after=1.5)
+        click_element_with_cursor(page, "button:has-text('Evidence Review Queue')", wait_before=0.3, wait_after=1.5)
 
         page.wait_for_selector("text=Evidence & Approval Review Queue", timeout=10000)
 
         # Point to the 3-stage lifecycle flow
-        print("[2:14] Pointing to Proposed -> Verified -> Confirmed stages...", flush=True)
-        move_cursor_to_element(page, "text=Proposed", wait_after=2.5)
-        move_cursor_to_element(page, "text=Verified", wait_after=2.5)
-        move_cursor_to_element(page, "text=Confirmed", wait_after=3.0)
+        print("[2:17] Pointing to Proposed -> Verified -> Confirmed stages...", flush=True)
+        move_cursor_to_element(page, "text=Proposed", wait_after=2.0)
+        move_cursor_to_element(page, "text=Verified", wait_after=2.0)
+        move_cursor_to_element(page, "text=Confirmed", wait_after=2.5)
 
         # Hover over the Sharma Prints claim in review
-        print("[2:22] Inspecting Sharma Prints verified citation card...", flush=True)
-        move_cursor_to_element(page, "text=Confirm order docket #4092 for Sharma Prints", wait_after=5.0)
+        print("[2:24] Inspecting Sharma Prints verified citation card...", flush=True)
+        move_cursor_to_element(page, "text=Confirm order docket #4092 for Sharma Prints", wait_after=4.5)
 
         # ---------------------------------------------------------------------
-        # Scene 7: Return to Simulation & Closing Payoff (2:32 - 2:48, ~16s)
-        # Matches 07_closing_payoff.wav (15.1s)
+        # Scene 7: Return to Simulation & Closing Payoff (2:29 - 2:40, 11s)
+        # Matches 07_closing_payoff.wav (7.2s)
         # ---------------------------------------------------------------------
-        print("[2:32] Scene 7: Returning to Alexa+ Live Simulation for closing payoff...", flush=True)
-        move_cursor_to_element(page, "button:has-text('Alexa+ Live Simulation')", wait_after=2.0)
-        click_element_with_cursor(page, "button:has-text('Alexa+ Live Simulation')", wait_before=0.4, wait_after=2.0)
+        print("[2:29] Scene 7: Returning to Alexa+ Live Simulation for closing payoff...", flush=True)
+        move_cursor_to_element(page, "button:has-text('Alexa+ Live Simulation')", wait_after=1.5)
+        click_element_with_cursor(page, "button:has-text('Alexa+ Live Simulation')", wait_before=0.3, wait_after=1.5)
 
-        print("[2:38] Centering on the full command center layout...", flush=True)
-        move_cursor_to_element(page, "text=Alexa+ Live Continuity Simulation", wait_after=3.0)
+        print("[2:33] Centering on the full command center layout...", flush=True)
+        move_cursor_to_element(page, "text=Alexa+ Live Continuity Simulation", wait_after=2.5)
         page.evaluate("window.__moveCursor(960, 500)")
-        page.wait_for_timeout(4000)
+        page.wait_for_timeout(4500)
 
-        print("[2:48] Demo complete! Finalizing 1080p video recording...", flush=True)
+        print("[2:40] Demo complete! Finalizing 1080p video recording...", flush=True)
         video_obj = page.video
         context.close()
         browser.close()
