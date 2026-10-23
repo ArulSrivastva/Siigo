@@ -17,6 +17,8 @@ frontend/out/
 data/benchmarks/ami_annotations/
 data/benchmarks/code-mixed-nlp/
 *.zip
+voiceover/
+*.wav
 
 # OS / IDE
 .DS_Store
