@@ -32,11 +32,13 @@ def run_alexa_simulation():
     db = SessionLocal()
     init_db()
 
-    # Clear previous run data
+    # Clear previous run data for deterministic clean walkthrough
     db.query(ActionRequest).delete()
     db.query(DelegationGrant).delete()
     db.query(AbsenceEvent).delete()
     db.query(AuditLog).delete()
+    db.query(Claim).delete()
+    db.query(Evidence).delete()
     db.commit()
 
     # Establish Owner Charter and Standing Delegation for Rajesh (INR 25,000 ceiling on HDFC Current)
@@ -118,7 +120,16 @@ def run_alexa_simulation():
     print(f"    Absent Principal: {handoff_doc['absent_person']}")
     print(f"    Designated Recipient: {handoff_doc['recipient']}")
     print(f"    Act Now Items: {len(handoff_doc['buckets']['act_now'])}")
+    for item in handoff_doc['buckets']['act_now']:
+        print(f"      - Commitment: {item['subject']}")
+        print(f"        Source Quote: \"{item['source_quote']}\"")
+        print(f"        Deadline: {item['deadline']} | Status: {item['status']}")
+        print(f"        Next Step: {item['next_step']}")
+        print(f"        Verification: {item['uncertainty'].upper()} (SHA256: {item['quote_sha256'][:16]}...)")
+    assert len(handoff_doc['buckets']['act_now']) > 0, "Error: Act Now bucket must contain actionable commitments from evidence!"
     print(f"    Needs Approval: {len(handoff_doc['buckets']['needs_approval'])}")
+    for app_item in handoff_doc['buckets']['needs_approval']:
+        print(f"      - Approval Item: {app_item['subject']}")
     print(f"    'What I Cannot See' Disclosures: {len(handoff_doc['buckets']['what_i_cannot_see'])}")
     for gap in handoff_doc['buckets']['what_i_cannot_see']:
         print(f"      - Gap: {gap['gap']} -> Mitigation: {gap['mitigation']}")

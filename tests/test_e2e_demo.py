@@ -197,6 +197,9 @@ def run_e2e_demo():
     print(f"[11] Safe Handoff Compiled:")
     print(f"    - Recipient: {handoff.get('recipient')}")
     print(f"    - Act Now Items: {len(handoff['buckets']['act_now'])}")
+    for it in handoff['buckets']['act_now']:
+        print(f"      * Commitment: {it['subject']} | Deadline: {it['deadline']} | Next Step: {it['next_step']}")
+    assert len(handoff['buckets']['act_now']) > 0, "Act Now items must not be empty"
     print(f"    - Needs Approval: {len(handoff['buckets']['needs_approval'])}")
     print(f"    - 'What I Cannot See' Items: {len(handoff['buckets']['what_i_cannot_see'])}")
 
