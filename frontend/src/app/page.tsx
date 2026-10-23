@@ -25,7 +25,11 @@ import {
   KeyRound,
   ExternalLink,
   ChevronRight,
-  Database
+  Database,
+  Check,
+  X,
+  Clock,
+  Eye
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -39,7 +43,7 @@ const INITIAL_DEMO_TOKENS = {
 
 export default function Home() {
   const [navSection, setNavSection] = useState<
-    "overview" | "commitments" | "handoffs" | "authority" | "audit" | "alexa_sim"
+    "overview" | "review_queue" | "commitments" | "handoffs" | "authority" | "audit" | "alexa_sim"
   >("alexa_sim");
 
   // Authentication Context State
@@ -56,6 +60,7 @@ export default function Home() {
   const [handoffDoc, setHandoffDoc] = useState<any>(null);
   const [actionOutcome, setActionOutcome] = useState<any>(null);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [reviewClaims, setReviewClaims] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
@@ -85,6 +90,21 @@ export default function Home() {
     fetchFreshTokens();
   }, []);
 
+  // Fetch Review Claims Queue
+  const fetchReviewClaims = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/claims/review`, {
+        headers: { "Authorization": `Bearer ${tokens.owner}` }
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setReviewClaims(d);
+      }
+    } catch {
+      // Backend not yet reachable
+    }
+  };
+
   // Initial data load from real backend
   const loadData = async () => {
     try {
@@ -101,6 +121,7 @@ export default function Home() {
       } else {
         setApiError(`Backend status HTTP ${res.status}: ${res.statusText}`);
       }
+      fetchReviewClaims();
     } catch {
       setApiError("Backend offline or unreachable at " + API_BASE + ". Start FastAPI backend to view live metrics.");
     }
@@ -109,6 +130,57 @@ export default function Home() {
   useEffect(() => {
     loadData();
   }, [isAbsent, tokens]);
+
+  // Human Review Confirm Handler (Owner only)
+  const handleConfirmClaim = async (claimId: string) => {
+    setLoading(true);
+    setApiError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/claims/${claimId}/confirm`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${tokens.owner}` }
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Confirmation rejected.");
+      }
+      await fetchReviewClaims();
+      // Also refresh handoff if active
+      if (isAbsent) {
+        const handoffRes = await fetch(`${API_BASE}/api/handoff/latest_active?recipient_id=Rajesh`, {
+          headers: { "Authorization": `Bearer ${tokens.staff}` }
+        });
+        if (handoffRes.ok) {
+          setHandoffDoc(await handoffRes.json());
+        }
+      }
+    } catch (e: any) {
+      setApiError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Human Review Reject Handler (Owner only)
+  const handleRejectClaim = async (claimId: string) => {
+    setLoading(true);
+    setApiError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/claims/${claimId}/reject`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${tokens.owner}` }
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Rejection failed.");
+      }
+      await fetchReviewClaims();
+    } catch (e: any) {
+      setApiError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Execute Step 1: Ingest Evidence
   const stepIngestEvidence = async () => {
@@ -152,7 +224,7 @@ export default function Home() {
         body: JSON.stringify({
           tenant_id: "default_tenant",
           evidence_id: evId,
-          kind: "decision",
+          kind: "commitment",
           subject: "Confirm order docket #4092 for Sharma Prints",
           modality: "agreed",
           exact_quote: quote,
@@ -163,12 +235,15 @@ export default function Home() {
       if (!claimRes.ok) throw new Error(`Span verification failed: HTTP ${claimRes.status}`);
       const claimData = await claimRes.json();
       setExtractedEvidence({
+        claim_id: claimData.claim_id,
         quote: quote,
         quote_hash: claimData.quote_sha256,
         source: "WhatsApp Operational Note · Sent by Maya Sundaram (Tier 0 Owner)",
-        verified: true
+        verified: true,
+        state: "verified"
       });
       setSimStep(3);
+      fetchReviewClaims();
     } catch (e: any) {
       setApiError(e.message);
     } finally {
@@ -432,6 +507,23 @@ export default function Home() {
             </button>
 
             <button
+              onClick={() => setNavSection("review_queue")}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition font-medium ${
+                navSection === "review_queue"
+                  ? "bg-[#25354F] text-[#FAF9F5]"
+                  : "text-[#A3B1C6] hover:bg-[#1E2E48] hover:text-[#FAF9F5]"
+              }`}
+            >
+              <div className="flex items-center space-x-2.5">
+                <Eye className="h-4 w-4 text-[#DCECE3]" />
+                <span>Evidence Review Queue</span>
+              </div>
+              <span className="text-[10px] font-mono bg-emerald-950 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-800">
+                HUMAN GATE
+              </span>
+            </button>
+
+            <button
               onClick={() => setNavSection("overview")}
               className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-lg transition font-medium ${
                 navSection === "overview"
@@ -686,24 +778,47 @@ export default function Home() {
                       {/* Handoff Triage Buckets */}
                       {handoffDoc && (
                         <div className="space-y-2 text-xs">
+                          {/* Act Now Section with Actionable Commitments */}
                           <div>
                             <span className="text-[10px] font-mono font-bold text-[#8A241C] uppercase block mb-1">
-                              Act Now:
+                              Act Now ({handoffDoc.buckets?.act_now?.length || 0} Actionable Commitments):
                             </span>
-                            <div className="p-2 bg-[#F9DDD8] text-[#8A241C] rounded border border-[#E8BDB6] text-[11px]">
-                              {handoffDoc.buckets?.act_now?.[0]?.subject || "Order docket #4092 for Sharma Prints (10,000 cartons)"}
-                            </div>
+                            {handoffDoc.buckets?.act_now?.map((item: any, idx: number) => (
+                              <div key={idx} className="p-3 bg-[#F9DDD8] text-[#8A241C] rounded border border-[#E8BDB6] space-y-1.5 shadow-sm">
+                                <div className="flex items-center justify-between font-bold text-xs">
+                                  <span>{item.subject}</span>
+                                  <span className="text-[10px] font-mono bg-white/70 px-1.5 py-0.5 rounded">
+                                    {item.status}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-[#8A241C]">
+                                  <strong>Next Step:</strong> {item.next_step}
+                                </p>
+                                <p className="text-[10px] text-[#5F6876] bg-white p-1.5 rounded border border-[#E8BDB6]">
+                                  <strong>Source Quote:</strong> "{item.source_quote}"
+                                </p>
+                                <div className="flex items-center justify-between text-[10px] font-mono pt-1 text-[#8A241C]">
+                                  <span>Deadline: {item.deadline}</span>
+                                  <span className="font-semibold text-emerald-800">
+                                    {item.uncertainty === "confirmed" ? "Human Confirmed" : "Span Verified"}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
                           </div>
 
+                          {/* Needs Delegated Approval */}
                           <div>
                             <span className="text-[10px] font-mono font-bold text-[#704E14] uppercase block mb-1">
                               Needs Delegated Approval:
                             </span>
-                            <div className="p-2 bg-[#F5E7C9] text-[#704E14] rounded border border-[#E5CE9F] text-[11px]">
-                              {handoffDoc.buckets?.needs_approval?.[0]?.subject || "Approve vendor payments up to 25,000 INR from HDFC Current"}
+                            <div className="p-2.5 bg-[#F5E7C9] text-[#704E14] rounded border border-[#E5CE9F] text-[11px] space-y-1">
+                              <p className="font-bold">Approve vendor payments up to ₹25,000 from HDFC Current</p>
+                              <p className="text-[10px] text-[#704E14]">Delegated to Rajesh under Owner Absence Charter.</p>
                             </div>
                           </div>
 
+                          {/* What I Cannot See (Disclosure) */}
                           <div>
                             <span className="text-[10px] font-mono font-bold text-[#5F6876] uppercase block mb-1">
                               What I Cannot See (Honest Disclosure):
@@ -711,12 +826,7 @@ export default function Home() {
                             <div className="p-2 bg-white rounded border border-[#E5E4DE] text-[10px] text-[#5F6876] space-y-1">
                               {handoffDoc.buckets?.what_i_cannot_see?.map((gap: any, i: number) => (
                                 <p key={i}>• {gap.gap}: {gap.mitigation}</p>
-                              )) || (
-                                <>
-                                  <p>• Unmonitored WhatsApp voice calls: Confirm with vendor before dispatch.</p>
-                                  <p>• Axis Bank OTP Phone: Route permitted payments through HDFC account within ceiling.</p>
-                                </>
-                              )}
+                              ))}
                             </div>
                           </div>
                         </div>
@@ -741,7 +851,7 @@ export default function Home() {
                     <button
                       onClick={testOverLimitAction}
                       disabled={loading}
-                      className="p-2 bg-[#F9DDD8] hover:bg-[#F4CBC3] text-[#8A241C] border border-[#E8BDB6] rounded font-medium text-left transition"
+                      className="p-2 bg-[#F9DDD8] hover:bg-[#F4CBC3] text-[#8A241C] border border-[#E8BDB6] rounded font-medium text-left transition shadow-sm"
                     >
                       <span className="font-bold block text-[10px] uppercase">Attack Test A</span>
                       <span>Over-Limit (₹65,000)</span>
@@ -749,7 +859,7 @@ export default function Home() {
                     <button
                       onClick={testAuthorizedAction}
                       disabled={loading}
-                      className="p-2 bg-[#DCECE3] hover:bg-[#CCE5D6] text-[#195236] border border-[#B8DBC7] rounded font-medium text-left transition"
+                      className="p-2 bg-[#DCECE3] hover:bg-[#CCE5D6] text-[#195236] border border-[#B8DBC7] rounded font-medium text-left transition shadow-sm"
                     >
                       <span className="font-bold block text-[10px] uppercase">Permitted Test B</span>
                       <span>Authorized (₹18,000)</span>
@@ -805,6 +915,135 @@ export default function Home() {
           )}
 
           {/* ========================================================= */}
+          {/* TAB: EVIDENCE REVIEW QUEUE (HUMAN-IN-THE-LOOP GOVERNANCE) */}
+          {/* ========================================================= */}
+          {navSection === "review_queue" && (
+            <div className="space-y-6">
+              <div className="editorial-card p-6 space-y-4">
+                <div className="flex items-center justify-between border-b border-[#E5E4DE] pb-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-[#141B24]">Evidence & Approval Review Queue</h2>
+                    <p className="text-xs text-[#5F6876] mt-0.5">
+                      Deterministic quote verification and human owner approval. Guarantees no hallucinated commitments enter the ledger.
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-2 text-xs font-mono">
+                    <span className="bg-[#FAF9F5] border border-[#E5E4DE] px-2 py-1 rounded text-[#5F6876]">
+                      Tier 0 Owner Gate: Active
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3-Stage Lifecycle Flow */}
+                <div className="grid grid-cols-3 gap-3 p-3 bg-[#FAF9F5] rounded-lg border border-[#E5E4DE] text-xs">
+                  <div className="flex items-center space-x-2">
+                    <span className="h-6 w-6 rounded-full bg-amber-100 text-amber-800 font-bold flex items-center justify-center text-[11px]">1</span>
+                    <div>
+                      <p className="font-bold text-[#141B24]">Proposed</p>
+                      <p className="text-[10px] text-[#5F6876]">Extracted from chat note</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="h-6 w-6 rounded-full bg-blue-100 text-blue-800 font-bold flex items-center justify-center text-[11px]">2</span>
+                    <div>
+                      <p className="font-bold text-[#141B24]">Verified</p>
+                      <p className="text-[10px] text-[#5F6876]">Exact span SHA-256 matched</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="h-6 w-6 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-[11px]">3</span>
+                    <div>
+                      <p className="font-bold text-[#141B24]">Confirmed</p>
+                      <p className="text-[10px] text-[#5F6876]">Approved by human owner</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Review Queue Items */}
+                <div className="space-y-3 pt-2">
+                  {reviewClaims.length > 0 ? (
+                    reviewClaims.map((claim) => (
+                      <div key={claim.id} className="p-4 bg-white rounded-lg border border-[#E5E4DE] space-y-3 shadow-sm">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-mono text-[#5F6876] uppercase tracking-wider block">
+                              Claim ID: {claim.id.slice(0, 8)}... · Extracted {claim.kind}
+                            </span>
+                            <h4 className="font-bold text-sm text-[#141B24]">{claim.subject}</h4>
+                          </div>
+
+                          {/* Lifecycle State Pill */}
+                          <div className="flex items-center space-x-2">
+                            <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold uppercase ${
+                              claim.state === "confirmed"
+                                ? "bg-[#DCECE3] text-[#195236] border border-[#B8DBC7]"
+                                : claim.state === "rejected"
+                                ? "bg-[#F9DDD8] text-[#8A241C] border border-[#E8BDB6]"
+                                : "bg-[#F5E7C9] text-[#704E14] border border-[#E5CE9F]"
+                            }`}>
+                              {claim.state === "confirmed" ? "Confirmed (Owner Approved)" : claim.state === "rejected" ? "Quarantined / Rejected" : "Verified (Pending Owner)"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Exact Supporting Quote */}
+                        <div className="editorial-subtle p-3 space-y-1">
+                          <span className="text-[10px] font-mono text-[#5F6876] uppercase">Supporting Verbatim Quote:</span>
+                          <p className="text-xs font-semibold text-[#141B24]">"{claim.source_quote}"</p>
+                          <div className="flex items-center justify-between text-[10px] font-mono text-[#5F6876] pt-1">
+                            <span>Character Span: [{claim.span?.[0]}:{claim.span?.[1]}]</span>
+                            <span>Quote SHA-256: {claim.quote_sha256?.slice(0, 16)}...</span>
+                          </div>
+                        </div>
+
+                        {/* Owner Confirmation Controls */}
+                        <div className="flex items-center justify-between pt-2 border-t border-[#E5E4DE]">
+                          <div className="text-[11px] text-[#5F6876]">
+                            {claim.last_confirmed_by ? (
+                              <span className="text-emerald-800 font-medium">
+                                Approved by {claim.last_confirmed_by} (Cryptographically Recorded)
+                              </span>
+                            ) : (
+                              <span>Pending Human Review by Tier 0 Owner</span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center space-x-2">
+                            {claim.state !== "confirmed" && (
+                              <button
+                                onClick={() => handleConfirmClaim(claim.id)}
+                                disabled={loading}
+                                className="bg-[#17263D] hover:bg-[#25354F] text-white text-xs font-medium px-3 py-1.5 rounded transition flex items-center space-x-1.5 shadow-sm"
+                              >
+                                <Check className="h-3.5 w-3.5 text-[#DCECE3]" />
+                                <span>Confirm Commitment (Owner)</span>
+                              </button>
+                            )}
+                            {claim.state !== "rejected" && (
+                              <button
+                                onClick={() => handleRejectClaim(claim.id)}
+                                disabled={loading}
+                                className="bg-white hover:bg-[#F9DDD8] text-[#8A241C] border border-[#E8BDB6] text-xs font-medium px-3 py-1.5 rounded transition flex items-center space-x-1.5"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                                <span>Reject / Quarantine</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-8 text-center text-xs text-[#5F6876] editorial-subtle">
+                      No commitments in review queue. Run the live simulation or ingest a WhatsApp chat to populate.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
           {/* TAB: OVERVIEW — "Your business, still moving."            */}
           {/* ========================================================= */}
           {navSection === "overview" && (
@@ -854,8 +1093,8 @@ export default function Home() {
               <div className="editorial-card p-6 space-y-4">
                 <div className="flex items-center justify-between border-b border-[#E5E4DE] pb-3">
                   <h3 className="font-semibold text-sm text-[#141B24]">Commitments Requiring Attention</h3>
-                  <button onClick={() => setNavSection("commitments")} className="text-xs text-[#17263D] font-medium hover:underline">
-                    View all
+                  <button onClick={() => setNavSection("review_queue")} className="text-xs text-[#17263D] font-medium hover:underline">
+                    Open Review Queue
                   </button>
                 </div>
 
