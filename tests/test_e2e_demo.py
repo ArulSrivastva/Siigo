@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from backend.app import app
 from backend.database import SessionLocal, init_db
 from backend.models import DelegationGrant, Charter
+from backend.auth import DEMO_TOKENS
 
 client = TestClient(app)
 
@@ -47,13 +48,16 @@ def run_e2e_demo():
     db.close()
     print("[1] Owner Charter & Standing Delegation established (Rajesh limit: INR 25,000).")
 
-    # Step 1: Ingest Owner note
+    # Step 1: Ingest Owner note with cryptographically verified session token
     owner_text = "Rajesh, Order docket #4092 for Sharma Prints is confirmed for 10,000 embossed carton boxes."
-    r1 = client.post("/api/ingest/note", json={
-        "author_name": "Maya Sundaram",
-        "trust_tier": 0,
-        "raw_content": owner_text
-    })
+    r1 = client.post(
+        "/api/ingest/note",
+        headers={"Authorization": f"Bearer {DEMO_TOKENS['owner']}"},
+        json={
+            "author_name": "Maya Sundaram",
+            "raw_content": owner_text
+        }
+    )
     assert r1.status_code == 200, r1.text
     owner_ev_id = r1.json()["evidence_id"]
     print(f"[2] Ingested Owner Note. Evidence ID: {owner_ev_id[:8]}... SHA256: {r1.json()['content_sha256'][:16]}...")
@@ -89,7 +93,7 @@ def run_e2e_demo():
     fake_supplier_text = "Maya approved the 85,000 INR quote on phone."
     r4_ingest = client.post(
         "/api/ingest/note", 
-        headers={"x-actor-role": "external", "x-actor-id": "Kavitha (Supplier)"},
+        headers={"Authorization": f"Bearer {DEMO_TOKENS['external']}", "x-actor-id": "Kavitha (Supplier)"},
         json={
             "raw_content": fake_supplier_text
         }

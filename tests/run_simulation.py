@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 from backend.app import app
 from backend.database import SessionLocal, init_db
 from backend.models import DelegationGrant, Charter, Evidence, Claim, AbsenceEvent, ActionRequest, AuditLog
+from backend.auth import DEMO_TOKENS
 
 client = TestClient(app)
 
@@ -57,7 +58,7 @@ def run_alexa_simulation():
     msg_text = "Rajesh, Order docket #4092 for Sharma Prints is confirmed for 10,000 embossed carton boxes."
     r_ingest = client.post(
         "/api/ingest/note",
-        headers={"x-actor-role": "owner", "x-actor-id": "Maya Sundaram"},
+        headers={"Authorization": f"Bearer {DEMO_TOKENS['owner']}", "x-actor-id": "Maya Sundaram"},
         json={"raw_content": msg_text}
     )
     ev_id = r_ingest.json()["evidence_id"]
@@ -128,14 +129,18 @@ def run_alexa_simulation():
     # Step 6: Consequential Action - Attack / Over-Limit Attempt (Rejected by Policy Engine)
     print(f"\n[6. GATED ACTION GATEWAY — UNAUTHORIZED ATTEMPT]")
     print("    Rajesh attempts vendor payment: INR 65,000 (Standing limit is INR 25,000)")
-    r_unauth = client.post("/api/action/execute", json={
-        "tenant_id": "default_tenant",
-        "action_type": "approve_vendor_payment",
-        "actor_id": "Rajesh",
-        "on_behalf_of": "Maya Sundaram",
-        "idempotency_key": str(uuid.uuid4()),
-        "params": {"amount_inr": 65000.0, "vendor": "Murugan Paper Mills", "account": "HDFC Current"}
-    })
+    r_unauth = client.post(
+        "/api/action/execute",
+        headers={"Authorization": f"Bearer {DEMO_TOKENS['staff']}"},
+        json={
+            "tenant_id": "default_tenant",
+            "action_type": "approve_vendor_payment",
+            "actor_id": "Rajesh",
+            "on_behalf_of": "Maya Sundaram",
+            "idempotency_key": str(uuid.uuid4()),
+            "params": {"amount_inr": 65000.0, "vendor": "Murugan Paper Mills", "account": "HDFC Current"}
+        }
+    )
     print(f"    Response Status: HTTP {r_unauth.status_code}")
     print(f"    Policy Decision: REJECTED")
     print(f"    Reason: {r_unauth.json()['detail']}")
@@ -144,14 +149,18 @@ def run_alexa_simulation():
     # Step 7: Consequential Action - Permitted Request (Authorized & Recorded, Not Mock Executed)
     print(f"\n[7. GATED ACTION GATEWAY — AUTHORIZED ATTEMPT]")
     print("    Rajesh requests vendor payment: INR 18,000 (Within INR 25,000 limit)")
-    r_auth = client.post("/api/action/execute", json={
-        "tenant_id": "default_tenant",
-        "action_type": "approve_vendor_payment",
-        "actor_id": "Rajesh",
-        "on_behalf_of": "Maya Sundaram",
-        "idempotency_key": str(uuid.uuid4()),
-        "params": {"amount_inr": 18000.0, "vendor": "Murugan Paper Mills", "account": "HDFC Current"}
-    })
+    r_auth = client.post(
+        "/api/action/execute",
+        headers={"Authorization": f"Bearer {DEMO_TOKENS['staff']}"},
+        json={
+            "tenant_id": "default_tenant",
+            "action_type": "approve_vendor_payment",
+            "actor_id": "Rajesh",
+            "on_behalf_of": "Maya Sundaram",
+            "idempotency_key": str(uuid.uuid4()),
+            "params": {"amount_inr": 18000.0, "vendor": "Murugan Paper Mills", "account": "HDFC Current"}
+        }
+    )
     auth_data = r_auth.json()
     print(f"    Response Status: HTTP {r_auth.status_code}")
     print(f"    Policy Decision: {auth_data['decision']}")
