@@ -21,16 +21,16 @@ An append-only, content-hashed repository storing raw chat exports, emails, and 
 Validates that every claim extracted by an LLM contains a verbatim substring matching the source document at exact character offsets. Fabricated quotes, hallucinated approvals, and drifted boundaries are rejected with HTTP 422.
 
 3. Cryptographic Authentication & Trust Boundary
-Actor identity is governed by HMAC-SHA256 signed session tokens. Raw, spoofed client role claims are strictly rejected:
+Actor identity is governed by HMAC-SHA256 signed session tokens. Request headers cannot escalate privileges:
 - Tier 0: Verified Owner
 - Tier 1: Staff Contributor
 - Tier 2: External Client or Vendor
 - Tier 3: Untrusted External Source
 
-Unauthenticated requests strictly default to unprivileged Tier 2 (EXTERNAL), never Owner. External and untrusted tiers cannot establish approval rules, define decisions, or execute out-of-channel approvals. Quoted forwards and forwarded messages automatically strip elevated forwarder privileges and downgrade to Tier 2.
+Unauthenticated requests strictly default to unprivileged Tier 2 (EXTERNAL), never Owner. Tokens enforce cryptographic HMAC signatures, expiration timestamps (exp), issued-at timestamps (iat), and issuer verification (iss). External and untrusted tiers cannot declare absence, establish approval rules, define decisions, or execute out-of-channel approvals.
 
 4. Authority Policy Engine
-A deterministic policy layer enforcing pre-authorized standing delegations and monetary ceilings. Payments exceeding delegation limits or lacking explicit positive amounts fail closed and return HTTP 403.
+A deterministic policy layer enforcing pre-authorized standing delegations and monetary ceilings. Payments exceeding delegation limits, omitting mandatory accounts on restricted grants, or specifying non-finite or negative amounts fail closed and return HTTP 403.
 
 5. Safe Handoff Compiler
 Compiles an evidence-cited operational briefing during an absence. Claims are filtered by recipient grants and divided into Act Now, Needs Approval, and Can Wait. Every handoff includes an explicit What I Cannot See transparency section identifying unmonitored channels and operational gaps.
@@ -38,9 +38,13 @@ Compiles an evidence-cited operational briefing during an absence. Claims are fi
 6. Hash-Chained Audit Trail
 Every state transition, quarantine event, and policy execution is linked through an immutable SHA-256 hash chain.
 
-## Model Context Protocol (MCP) Server (Spec 2025-11-25+ / Streamable HTTP)
+## Model Context Protocol (MCP) Server (Streamable HTTP / JSON-RPC 2.0 Prototype)
 
-Siigo implements an MCP server conforming to the 2025-11-25+ Streamable HTTP specification under the `/mcp` endpoint.
+Siigo implements an MCP server prototype conforming to JSON-RPC 2.0 over Streamable HTTP transport under the `/mcp` endpoint:
+- Protocol Handshake: `initialize` method returning protocol version, server capabilities, and server info.
+- Protocol Notifications & Health: `notifications/initialized` and `ping`.
+- Tool Discovery: `tools/list` returning the registered Siigo governance tools.
+- Tool Call Execution: `tools/call` executing requested tools within the caller's authenticated tenant context.
 
 ### Exposed MCP Tools
 
@@ -56,7 +60,7 @@ Run the automated MCP test suite:
 python -m tests.test_mcp_server
 ```
 
-All tool discovery (tools/list) and tool executions (tools/call) communicate via JSON-RPC 2.0 over Streamable HTTP and call actual application logic.
+All tool discovery (`tools/list`), handshakes (`initialize`), and tool calls (`tools/call`) communicate via JSON-RPC 2.0 over Streamable HTTP against the live application logic.
 
 ## Alexa+ Simulated Experience (Hackathon Track Entry Point)
 
@@ -109,13 +113,18 @@ Adversarial attack test command:
 python -m tests.test_adversarial_suite
 ```
 
+End-to-end integration and financial policy test command:
+```bash
+python -m tests.test_e2e_demo
+```
+
 ## Repository Layout
 
 - backend/
-  - app.py: FastAPI REST service, MCP route mounting, and lifecycle management
-  - auth.py: Cryptographic HMAC-SHA256 session token verification and tenant context
+  - app.py: FastAPI REST service, MCP route mounting, and authenticated endpoint scoping
+  - auth.py: Cryptographic HMAC-SHA256 session token verification, expiration, and tenant context
   - models.py: SQLAlchemy database models for evidence, claims, charter, and audit logs
-  - policy_engine.py: Deterministic policy-as-code engine
+  - policy_engine.py: Deterministic policy-as-code engine with fail-closed financial checks
   - handoff_compiler.py: Scoped handoff briefing compiler
   - audit.py: Cryptographic hash-chained audit logger
   - analyzers.py: Bus-factor, fragility, and single-point-of-failure analyzers
@@ -130,12 +139,12 @@ python -m tests.test_adversarial_suite
     - alexa_adapter.py: Alexa thin-client triage gateway
 
 - frontend/
-  - Industrial Telemetry and Editorial dashboard built with Next.js, React, Tailwind CSS, and Lucide icons.
-  - Three-column Alexa+ Live Simulation showcase connecting directly to FastAPI backend.
+  - Industrial Telemetry and Editorial command center built with Next.js, React, Tailwind CSS, and Lucide icons.
+  - Three-column Alexa+ Live Simulation showcase with active actor session switcher and fail-closed state derivation.
 
 - tests/
   - run_simulation.py: Full 8-step Alexa+ simulated experience script
-  - test_mcp_server.py: MCP spec 2025-11-25+ Streamable HTTP tool discovery and execution tests
+  - test_mcp_server.py: MCP protocol tests (initialize, tools/list, tools/call, error codes)
   - test_e2e_demo.py: Full end-to-end integration and security verification
   - test_adversarial_suite.py: 10-scenario adversarial attack test suite with fail-closed assertions
   - test_whatsapp_extraction.py: Verification of real WhatsApp export parsing
@@ -155,14 +164,14 @@ python -m tests.test_adversarial_suite
 
 1. Install backend dependencies:
 ```bash
-pip install fastapi uvicorn sqlalchemy pydantic
+pip install fastapi uvicorn sqlalchemy pydantic requests
 ```
 
-2. Run tests:
+2. Run verification tests:
 ```bash
+python -m tests.test_mcp_server
 python -m tests.test_e2e_demo
 python -m tests.test_adversarial_suite
-python -m tests.test_mcp_server
 python -m tests.run_simulation
 python -m tests.eval_rigorous_scoreboard
 ```
