@@ -34,11 +34,11 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-// Fallback pre-minted cryptographic tokens (valid for 7 days with HMAC-SHA256)
+// Cryptographically verified HMAC-SHA256 tokens for demo and test evaluation (valid for 365 days)
 const INITIAL_DEMO_TOKENS = {
-  owner: "eyJhY3Rvcl9pZCI6ICJtYXlhX293bmVyIiwgImRpc3BsYXlfbmFtZSI6ICJNYXlhIFN1bmRhcmFtIChPd25lcikiLCAiZXhwIjogMTc5MzM3Nzg3NiwgImlhdCI6IDE3OTI3NzMwNzYsICJpc3MiOiAic2lpZ28tYXV0aG9yaXR5LWNvcmUiLCAidGVuYW50X2lkIjogImRlZmF1bHRfdGVuYW50IiwgInRydXN0X3RpZXIiOiAwfQ.2e2d68dceb8d66104d9652ad46a96b6548c718abda22865c06593236062175f6",
-  staff: "eyJhY3Rvcl9pZCI6ICJyYWplc2hfc3RhZmYiLCAiZGlzcGxheV9uYW1lIjogIlJhamVzaCAoU3RhZmYpIiwgImV4cCI6IDE3OTMzNzc4NzYsICJpYXQiOiAxNzkyNzczMDc2LCAiaXNzIjogInNpaWdvLWF1dGhvcml0eS1jb3JlIiwgInRlbmFudF9pZCI6ICJkZWZhdWx0X3RlbmFudCIsICJ0cnVzdF90aWVyIjogMX0.2e01b4729a1fe806a9ce542d8e224b111744d3a59c6b5e5157fbf15507ad14ef",
-  external: "eyJhY3Rvcl9pZCI6ICJleHRlcm5hbF9ndWVzdCIsICJkaXNwbGF5X25hbWUiOiAiRXh0ZXJuYWwgR3Vlc3QiLCAiZXhwIjogMTc5MzM3Nzg3NiwgImlhdCI6IDE3OTI3NzMwNzYsICJpc3MiOiAic2lpZ28tYXV0aG9yaXR5LWNvcmUiLCAidGVuYW50X2lkIjogImRlZmF1bHRfdGVuYW50IiwgInRydXN0X3RpZXIiOiAyfQ.a1e95a515167b0a8f06088bb7072d1c3a3b7a8842d064134cea383ee9d76af34"
+  owner: "eyJhY3Rvcl9pZCI6ICJtYXlhX293bmVyIiwgImRpc3BsYXlfbmFtZSI6ICJNYXlhIFN1bmRhcmFtIChPd25lcikiLCAiZXhwIjogMTgyNDMxMDQ5NiwgImlhdCI6IDE3OTI3NzQ0OTYsICJpc3MiOiAic2lpZ28tYXV0aG9yaXR5LWNvcmUiLCAidGVuYW50X2lkIjogImRlZmF1bHRfdGVuYW50IiwgInRydXN0X3RpZXIiOiAwfQ.8f0c9dc37958718f41faab0331151252fe787c642643a2bec0ad81907b6ab9ef",
+  staff: "eyJhY3Rvcl9pZCI6ICJyYWplc2hfc3RhZmYiLCAiZGlzcGxheV9uYW1lIjogIlJhamVzaCAoU3RhZmYpIiwgImV4cCI6IDE4MjQzMTA0OTYsICJpYXQiOiAxNzkyNzc0NDk2LCAiaXNzIjogInNpaWdvLWF1dGhvcml0eS1jb3JlIiwgInRlbmFudF9pZCI6ICJkZWZhdWx0X3RlbmFudCIsICJ0cnVzdF90aWVyIjogMX0.ca62962874fd1cde31b65091d4c35269a244afb434b16ed70e8137d0716c2d7c",
+  external: "eyJhY3Rvcl9pZCI6ICJleHRlcm5hbF9ndWVzdCIsICJkaXNwbGF5X25hbWUiOiAiRXh0ZXJuYWwgR3Vlc3QiLCAiZXhwIjogMTgyNDMxMDQ5NiwgImlhdCI6IDE3OTI3NzQ0OTYsICJpc3MiOiAic2lpZ28tYXV0aG9yaXR5LWNvcmUiLCAidGVuYW50X2lkIjogImRlZmF1bHRfdGVuYW50IiwgInRydXN0X3RpZXIiOiAyfQ.579a9694aafc0137c240baa935fb46c808e119cba5c15df7c104ccd6258326a0"
 };
 
 export default function Home() {
@@ -47,7 +47,7 @@ export default function Home() {
   >("alexa_sim");
 
   // Authentication Context State
-  const [tokens, setTokens] = useState<Record<string, string>>(INITIAL_DEMO_TOKENS);
+  const [tokens] = useState<Record<string, string>>(INITIAL_DEMO_TOKENS);
   const [activeRole, setActiveRole] = useState<"owner" | "staff" | "external">("owner");
 
   // Backend state
@@ -64,37 +64,12 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  // Mint fresh session tokens from backend on startup
-  useEffect(() => {
-    const fetchFreshTokens = async () => {
-      try {
-        const [oRes, sRes, eRes] = await Promise.all([
-          fetch(`${API_BASE}/api/auth/token?role=owner`),
-          fetch(`${API_BASE}/api/auth/token?role=staff`),
-          fetch(`${API_BASE}/api/auth/token?role=external`)
-        ]);
-        if (oRes.ok && sRes.ok && eRes.ok) {
-          const oData = await oRes.json();
-          const sData = await sRes.json();
-          const eData = await eRes.json();
-          setTokens({
-            owner: oData.token,
-            staff: sData.token,
-            external: eData.token
-          });
-        }
-      } catch {
-        // Fallback to cryptographic initial tokens
-      }
-    };
-    fetchFreshTokens();
-  }, []);
-
   // Fetch Review Claims Queue
   const fetchReviewClaims = async () => {
     try {
+      const activeToken = tokens[activeRole] || tokens.owner;
       const res = await fetch(`${API_BASE}/api/claims/review`, {
-        headers: { "Authorization": `Bearer ${tokens.owner}` }
+        headers: { "Authorization": `Bearer ${activeToken}` }
       });
       if (res.ok) {
         const d = await res.json();
@@ -108,8 +83,9 @@ export default function Home() {
   // Initial data load from real backend
   const loadData = async () => {
     try {
+      const activeToken = tokens[activeRole] || tokens.owner;
       const res = await fetch(`${API_BASE}/api/continuity/health`, {
-        headers: { "Authorization": `Bearer ${tokens.owner}` }
+        headers: { "Authorization": `Bearer ${activeToken}` }
       });
       if (res.ok) {
         const d = await res.json();
@@ -129,16 +105,17 @@ export default function Home() {
 
   useEffect(() => {
     loadData();
-  }, [isAbsent, tokens]);
+  }, [isAbsent, activeRole, tokens]);
 
   // Human Review Confirm Handler (Owner only)
   const handleConfirmClaim = async (claimId: string) => {
     setLoading(true);
     setApiError(null);
     try {
+      const activeToken = tokens[activeRole] || tokens.owner;
       const res = await fetch(`${API_BASE}/api/claims/${claimId}/confirm`, {
         method: "POST",
-        headers: { "Authorization": `Bearer ${tokens.owner}` }
+        headers: { "Authorization": `Bearer ${activeToken}` }
       });
       if (!res.ok) {
         const err = await res.json();
@@ -166,9 +143,10 @@ export default function Home() {
     setLoading(true);
     setApiError(null);
     try {
+      const activeToken = tokens[activeRole] || tokens.owner;
       const res = await fetch(`${API_BASE}/api/claims/${claimId}/reject`, {
         method: "POST",
-        headers: { "Authorization": `Bearer ${tokens.owner}` }
+        headers: { "Authorization": `Bearer ${activeToken}` }
       });
       if (!res.ok) {
         const err = await res.json();

@@ -9,7 +9,7 @@ Enforces:
 """
 from typing import Dict, Any, List
 from sqlalchemy.orm import Session
-from backend.models import Claim, ClaimEvidence, AbsenceEvent, Evidence
+from backend.models import Claim, ClaimEvidence, AbsenceEvent, Evidence, DelegationGrant
 
 def compile_safe_handoff(
     db: Session,
@@ -19,7 +19,11 @@ def compile_safe_handoff(
 ) -> Dict[str, Any]:
     """
     Assembles a scoped, evidence-cited handoff for a recipient covering an absent person.
-    Populates actionable commitments into Act Now with exact verbatim citations.
+    Enforces recipient grant filtering:
+    - Scopes actionable commitments and approval rules to recipient's active delegation grants
+    - Categorizes out-of-scope or over-ceiling actions into needs_approval or can_wait
+    - Populates actionable commitments into Act Now with exact verbatim citations
+    - Flags out-of-band coverage gaps in 'What I Cannot See'
     """
     if absence_id == "latest_active":
         absence = db.query(AbsenceEvent).filter(
@@ -41,7 +45,32 @@ def compile_safe_handoff(
 
     absent_owner = absence.person_id
 
-    # Fetch claims owned by or relevant to the absent owner
+    # 1. Inspect recipient's active delegation grants
+    grants = db.query(DelegationGrant).filter(
+        DelegationGrant.tenant_id == tenant_id,
+        DelegationGrant.grantee == recipient_id,
+        DelegationGrant.revoked_at.is_(None)
+    ).all()
+
+    granted_actions = set()
+    max_amount_ceiling = 0.0
+    allowed_accounts = set()
+
+    for g in grants:
+        if isinstance(g.allowed_actions, list):
+            for a in g.allowed_actions:
+                granted_actions.add(str(a).lower().strip())
+        elif isinstance(g.allowed_actions, str):
+            granted_actions.add(str(g.allowed_actions).lower().strip())
+        if isinstance(g.scope, dict):
+            max_amt = g.scope.get("max_amount_inr")
+            if max_amt is not None:
+                max_amount_ceiling = max(max_amount_ceiling, float(max_amt))
+            acct = g.scope.get("account")
+            if acct:
+                allowed_accounts.add(str(acct).lower().strip())
+
+    # 2. Fetch claims owned by or relevant to the absent owner
     claims = db.query(Claim).filter(
         Claim.tenant_id == tenant_id,
         Claim.state.in_(["proposed", "confirmed"])
@@ -83,12 +112,33 @@ def compile_safe_handoff(
         }
 
         action_type = (c.payload or {}).get("action_type") if isinstance(c.payload, dict) else None
-        if c.kind == "approval_rule" or action_type in ("approve_payment", "approve_vendor_payment"):
-            item_data["status"] = "REQUIRES_DELEGATED_APPROVAL"
-            item_data["next_step"] = "Verify vendor invoice against standing limit (INR 25,000) before payout"
-            needs_approval.append(item_data)
+        amount_inr = (c.payload or {}).get("amount_inr") if isinstance(c.payload, dict) else None
+
+        # 3. Recipient Grant Filtering & Categorization
+        if c.kind == "approval_rule" or (action_type and action_type in ("approve_payment", "approve_vendor_payment")):
+            has_approval_grant = ("approve_vendor_payment" in granted_actions or 
+                                  "approve_payment" in granted_actions or 
+                                  "*" in granted_actions)
+            if not has_approval_grant and len(grants) > 0:
+                item_data["status"] = "OUTSIDE_DELEGATION_SCOPE"
+                item_data["next_step"] = f"Requires Owner action: {recipient_id} has no payment approval grant"
+                needs_approval.append(item_data)
+            elif amount_inr is not None and max_amount_ceiling > 0 and amount_inr > max_amount_ceiling:
+                item_data["status"] = "EXCEEDS_DELEGATION_LIMIT"
+                item_data["next_step"] = f"Requires Owner override: amount INR {amount_inr:,.2f} exceeds INR {max_amount_ceiling:,.2f} ceiling"
+                needs_approval.append(item_data)
+            else:
+                limit_str = f"INR {max_amount_ceiling:,.0f}" if max_amount_ceiling > 0 else "INR 25,000"
+                item_data["status"] = "REQUIRES_DELEGATED_APPROVAL"
+                item_data["next_step"] = f"Verify vendor invoice against standing limit ({limit_str}) before payout"
+                needs_approval.append(item_data)
         elif c.modality in ("agreed", "committed") or c.kind in ("commitment", "decision"):
-            act_now.append(item_data)
+            if action_type and granted_actions and action_type.lower() not in granted_actions and "*" not in granted_actions:
+                item_data["status"] = "OUTSIDE_DELEGATION_SCOPE"
+                item_data["next_step"] = f"Requires Owner action: '{action_type}' not granted to {recipient_id}"
+                can_wait.append(item_data)
+            else:
+                act_now.append(item_data)
         elif c.modality == "considered":
             item_data["status"] = "DISCUSS_UPON_RETURN"
             item_data["deadline"] = "Flexible"
@@ -96,7 +146,14 @@ def compile_safe_handoff(
         else:
             can_wait.append(item_data)
 
-    # Compile 'What I Cannot See' audit section
+    # 4. Compile 'What I Cannot See' audit section
+    if len(grants) == 0:
+        cannot_see.append({
+            "gap": f"No active delegation grant found for recipient '{recipient_id}'",
+            "impact": f"{recipient_id} has no pre-authorized authority to execute financial actions.",
+            "mitigation": "Establish a standing delegation grant under Owner Charter before execution."
+        })
+
     cannot_see.append({
         "gap": "Personal non-exported WhatsApp chats and direct phone calls",
         "impact": "Unwritten verbal agreements made in the last 48 hours may be absent.",
@@ -112,6 +169,12 @@ def compile_safe_handoff(
         "handoff_id": f"handoff_{absence.id[:8]}",
         "absent_person": absent_owner,
         "recipient": recipient_id,
+        "delegation_summary": {
+            "grantee": recipient_id,
+            "active_grants": len(grants),
+            "allowed_actions": sorted(list(granted_actions)),
+            "max_amount_ceiling": max_amount_ceiling
+        },
         "buckets": {
             "act_now": act_now,
             "needs_approval": needs_approval,

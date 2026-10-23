@@ -113,6 +113,11 @@ Adversarial attack test command:
 python -m tests.test_adversarial_suite
 ```
 
+Security and authentication regression test command:
+```bash
+python -m tests.test_security_regressions
+```
+
 End-to-end integration and financial policy test command:
 ```bash
 python -m tests.test_e2e_demo
@@ -169,6 +174,7 @@ pip install fastapi uvicorn sqlalchemy pydantic requests
 
 2. Run verification tests:
 ```bash
+python -m tests.test_security_regressions
 python -m tests.test_mcp_server
 python -m tests.test_e2e_demo
 python -m tests.test_adversarial_suite

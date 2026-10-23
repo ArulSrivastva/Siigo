@@ -123,8 +123,8 @@ def run_e2e_demo():
         "method": "spoofed_call",
         "duration_days": 3
     })
-    assert r5_unauth.status_code == 403
-    print(f"[6] Unauthenticated Absence Declaration: BLOCKED (HTTP 403: {r5_unauth.json()['detail'][:45]}...)")
+    assert r5_unauth.status_code == 401
+    print(f"[6] Unauthenticated Absence Declaration: BLOCKED (HTTP 401: {r5_unauth.json()['detail'][:45]}...)")
 
     # Step 6: Authenticated Absence Declaration with Owner Session
     r5 = client.post(

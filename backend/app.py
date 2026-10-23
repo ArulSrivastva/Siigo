@@ -23,7 +23,13 @@ from backend.audit import append_audit_event
 from backend.policy_engine import evaluate_action_policy
 from backend.analyzers import analyze_continuity_health
 from backend.handoff_compiler import compile_safe_handoff
-from backend.auth import get_current_actor, AuthenticatedActor
+from backend.auth import (
+    get_current_actor,
+    require_authenticated_actor,
+    require_staff_or_owner,
+    require_owner,
+    AuthenticatedActor
+)
 from backend.mcp_server import mcp_router
 from tests.gold_dataset.verifier import verify_span, validate_authority_claim, ForgedAuthorityError, VerificationError
 from tests.gold_dataset.schema import EvidenceSpan, TrustTier, ClaimKind
@@ -34,9 +40,14 @@ app = FastAPI(
     description="Siigo: A governed commitment and authority ledger with a Safe Handoff mode for owner-run businesses."
 )
 
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -161,14 +172,14 @@ class WhatsAppUploadRequest(BaseModel):
 @app.post("/api/ingest/whatsapp")
 def upload_whatsapp_chat(
     req: WhatsAppUploadRequest, 
-    actor: AuthenticatedActor = Depends(get_current_actor),
+    actor: AuthenticatedActor = Depends(require_staff_or_owner),
     db: Session = Depends(get_db)
 ):
     """
     Ingests raw WhatsApp .txt export, parses Indian timestamps,
     resolves author trust tiers, and persists immutable evidence items scoped to the authenticated tenant.
     """
-    tenant_id = actor.tenant_id or req.tenant_id
+    tenant_id = actor.tenant_id
     records = ingest_whatsapp_export(db, tenant_id, req.chat_export_text, req.default_visibility)
     return {
         "status": "ingested",
@@ -180,7 +191,7 @@ def upload_whatsapp_chat(
 @app.post("/api/evidence/{evidence_id}/extract")
 def extract_from_evidence(
     evidence_id: str, 
-    actor: AuthenticatedActor = Depends(get_current_actor),
+    actor: AuthenticatedActor = Depends(require_staff_or_owner),
     db: Session = Depends(get_db)
 ):
     """
@@ -269,7 +280,7 @@ def propose_claim(
     2. Deterministic Span Verifier (verbatim quote offset match)
     3. Production Security Boundary (quarantines external and staff authority creation)
     """
-    tenant_id = actor.tenant_id if actor.tenant_id != "default_tenant" else req.tenant_id
+    tenant_id = actor.tenant_id if actor.tenant_id != "unauthenticated" else req.tenant_id
     # 1. Enforce Tenant Consistency
     ev = db.query(Evidence).filter(
         Evidence.id == req.evidence_id,
@@ -349,7 +360,7 @@ def propose_claim(
 
 @app.get("/api/claims/review")
 def list_claims_for_review(
-    actor: AuthenticatedActor = Depends(get_current_actor),
+    actor: AuthenticatedActor = Depends(require_staff_or_owner),
     db: Session = Depends(get_db)
 ):
     """
@@ -384,7 +395,7 @@ def list_claims_for_review(
 @app.post("/api/claims/{claim_id}/confirm")
 def confirm_claim(
     claim_id: str,
-    actor: AuthenticatedActor = Depends(get_current_actor),
+    actor: AuthenticatedActor = Depends(require_owner),
     db: Session = Depends(get_db)
 ):
     """
@@ -392,12 +403,6 @@ def confirm_claim(
     Transitions an extracted commitment from 'proposed' to 'confirmed'.
     Enforces that only verified Tier 0 Owner can confirm business decisions.
     """
-    if actor.trust_tier != TrustTier.OWNER:
-        raise HTTPException(
-            status_code=403, 
-            detail=f"Forbidden: Only verified Owner (Tier 0) can confirm business commitments. Caller is Tier {actor.trust_tier.value}."
-        )
-
     claim = db.query(Claim).filter(Claim.id == claim_id, Claim.tenant_id == actor.tenant_id).first()
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found.")
@@ -424,19 +429,13 @@ def confirm_claim(
 @app.post("/api/claims/{claim_id}/reject")
 def reject_claim(
     claim_id: str,
-    actor: AuthenticatedActor = Depends(get_current_actor),
+    actor: AuthenticatedActor = Depends(require_owner),
     db: Session = Depends(get_db)
 ):
     """
     Human Review & Rejection Gateway:
     Quarantines or rejects an extracted claim that was hallucinated or superseded.
     """
-    if actor.trust_tier != TrustTier.OWNER:
-        raise HTTPException(
-            status_code=403, 
-            detail=f"Forbidden: Only verified Owner (Tier 0) can reject commitments. Caller is Tier {actor.trust_tier.value}."
-        )
-
     claim = db.query(Claim).filter(Claim.id == claim_id, Claim.tenant_id == actor.tenant_id).first()
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found.")
@@ -456,26 +455,9 @@ def reject_claim(
         "state": "rejected"
     }
 
-from backend.auth import mint_session_token
-
-@app.get("/api/auth/token")
-def get_demo_session_token(role: str = "owner"):
-    """
-    Mints a freshly signed HMAC-SHA256 session token for demo environments and tests.
-    Strictly signs token with exp, iat, and issuer claims.
-    """
-    clean = role.lower().strip()
-    if clean == "owner":
-        token = mint_session_token("maya_owner", "default_tenant", TrustTier.OWNER, "Maya Sundaram (Owner)")
-    elif clean == "staff":
-        token = mint_session_token("rajesh_staff", "default_tenant", TrustTier.STAFF, "Rajesh (Staff)")
-    else:
-        token = mint_session_token("external_guest", "default_tenant", TrustTier.EXTERNAL, "External Guest")
-    return {"role": clean, "token": token}
-
 @app.get("/api/continuity/health")
 def continuity_health(
-    actor: AuthenticatedActor = Depends(get_current_actor), 
+    actor: AuthenticatedActor = Depends(require_staff_or_owner), 
     db: Session = Depends(get_db)
 ):
     """Returns the Bus-Factor Report and Readiness Score for actor's tenant."""
@@ -484,18 +466,13 @@ def continuity_health(
 @app.post("/api/absence/declare")
 def declare_absence(
     req: DeclareAbsenceRequest, 
-    actor: AuthenticatedActor = Depends(get_current_actor),
+    actor: AuthenticatedActor = Depends(require_owner),
     db: Session = Depends(get_db)
 ):
     """
     Declares owner absence via Charter quorum or direct owner trigger.
     Enforces that caller MUST be cryptographically authenticated as Owner (Tier 0).
     """
-    if actor.trust_tier != TrustTier.OWNER:
-        raise HTTPException(
-            status_code=403, 
-            detail=f"Forbidden: Absence declaration requires verified Tier 0 Owner authentication. Caller is Tier {actor.trust_tier.value}."
-        )
     tenant_id = actor.tenant_id
 
     now = datetime.datetime.utcnow()
@@ -525,7 +502,7 @@ def declare_absence(
 @app.get("/api/handoff/latest_active")
 def get_latest_active_handoff(
     recipient_id: str = "Rajesh", 
-    actor: AuthenticatedActor = Depends(get_current_actor),
+    actor: AuthenticatedActor = Depends(require_staff_or_owner),
     db: Session = Depends(get_db)
 ):
     """Compiles a verified Safe Handoff for the latest active absence event."""
@@ -538,7 +515,7 @@ def get_latest_active_handoff(
 def generate_handoff(
     absence_id: str, 
     recipient_id: str = "Rajesh", 
-    actor: AuthenticatedActor = Depends(get_current_actor),
+    actor: AuthenticatedActor = Depends(require_staff_or_owner),
     db: Session = Depends(get_db)
 ):
     """Compiles a verified Safe Handoff with citations and 'What I cannot see' section."""
@@ -550,7 +527,7 @@ def generate_handoff(
 @app.post("/api/action/execute")
 def execute_gated_action(
     req: ExecuteActionRequest, 
-    actor: AuthenticatedActor = Depends(get_current_actor),
+    actor: AuthenticatedActor = Depends(require_staff_or_owner),
     db: Session = Depends(get_db)
 ):
     """
@@ -629,7 +606,7 @@ def execute_gated_action(
 
 @app.get("/api/audit/logs")
 def get_audit_trail(
-    actor: AuthenticatedActor = Depends(get_current_actor),
+    actor: AuthenticatedActor = Depends(require_staff_or_owner),
     db: Session = Depends(get_db)
 ):
     """Returns the cryptographic hash-chained audit trail scoped to actor tenant."""
