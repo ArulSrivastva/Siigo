@@ -103,6 +103,24 @@ The API documentation is accessible at http://127.0.0.1:8000/docs.
 
 The web interface is accessible at http://localhost:3000.
 
+## Model Context Protocol (MCP) Server (Spec 2025-11-25+ / Streamable HTTP)
+
+Siigo implements an MCP server conforming to the 2025-11-25+ Streamable HTTP specification under the /mcp endpoint.
+
+### Exposed MCP Tools
+
+1. siigo_get_continuity_health: Returns readiness score, active single points of failure (SPOF), and pending commitments.
+2. siigo_compile_handoff: Generates a grant-scoped Safe Handoff document with exact citations and unmonitored channel disclosures.
+3. siigo_verify_evidence_span: Deterministic span verification tool validating verbatim substring quotes against source messages.
+4. siigo_evaluate_gated_action: Cedar-style policy evaluation tool enforcing pre-authorized standing limits and account scopes.
+
+### Running MCP Verification Tests
+
+Run the automated MCP test suite:
+python -m tests.test_mcp_server
+
+All tool discovery (tools/list) and tool executions (tools/call) communicate via JSON-RPC 2.0 over Streamable HTTP and call actual application logic.
+
 ## Alexa+ Simulated Experience (Hackathon Track Entry Point)
 
 Siigo includes a runnable simulation entry point satisfying the Alexa+ Simulated Experience track:

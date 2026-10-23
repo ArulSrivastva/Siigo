@@ -24,6 +24,7 @@ from backend.policy_engine import evaluate_action_policy
 from backend.analyzers import analyze_continuity_health
 from backend.handoff_compiler import compile_safe_handoff
 from backend.auth import get_current_actor, AuthenticatedActor
+from backend.mcp_server import mcp_router
 from tests.gold_dataset.verifier import verify_span, validate_authority_claim, ForgedAuthorityError, VerificationError
 from tests.gold_dataset.schema import EvidenceSpan, TrustTier, ClaimKind
 
@@ -40,6 +41,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(mcp_router)
 
 @app.on_event("startup")
 def startup_event():
