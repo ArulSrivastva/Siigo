@@ -193,8 +193,13 @@ def ingest_note(
     """
     content_hash = hashlib.sha256(req.raw_content.encode("utf-8")).hexdigest()
     # Trust verified actor context over client-supplied tier
-    effective_name = actor.display_name if actor.display_name != "anonymous" else (req.author_name or "Unknown")
-    effective_tier = actor.trust_tier.value if actor.actor_id != "anonymous" else (req.trust_tier if req.trust_tier is not None else TrustTier.EXTERNAL.value)
+    # External or unauthenticated callers can never claim Tier 0 (Owner) or Tier 1 (Staff)
+    if actor.trust_tier in (TrustTier.OWNER, TrustTier.STAFF):
+        effective_name = req.author_name or actor.display_name
+        effective_tier = actor.trust_tier.value
+    else:
+        effective_name = req.author_name or actor.display_name
+        effective_tier = TrustTier.EXTERNAL.value
 
     ev = Evidence(
         tenant_id=actor.tenant_id,
