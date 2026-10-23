@@ -36,6 +36,39 @@ def handle_alexa_request(db: Session, tenant_id: str, request_body: Dict[str, An
             else:
                 speech_output = "All commitments are up to date and no urgent operational blocks are detected."
 
+        elif intent_name == "DeclareAbsenceAndTriageIntent":
+            # Handles: "I'm unavailable tomorrow. Identify anything that needs attention."
+            # Declares absence in backend and compiles immediate attention briefing
+            from backend.models import AbsenceEvent
+            from backend.handoff_compiler import compile_safe_handoff
+            import datetime
+
+            now = datetime.datetime.utcnow()
+            expires_at = now + datetime.timedelta(days=1)
+            absence = AbsenceEvent(
+                tenant_id=tenant_id,
+                person_id="Maya Sundaram",
+                declared_by=["Maya Sundaram"],
+                method="voice_alexa_declared",
+                status="active",
+                started_at=now,
+                auto_expires_at=expires_at
+            )
+            db.add(absence)
+            db.commit()
+            db.refresh(absence)
+
+            handoff = compile_safe_handoff(db, tenant_id, absence.id, recipient_id="Rajesh")
+            act_now_count = len(handoff["buckets"]["act_now"])
+            needs_approval_count = len(handoff["buckets"]["needs_approval"])
+            cannot_see_count = len(handoff["buckets"]["what_i_cannot_see"])
+
+            speech_output = (
+                f"Absence recorded for tomorrow under your Continuity Charter. "
+                f"I've generated a Safe Handoff for Rajesh with {act_now_count} immediate commitments, "
+                f"{needs_approval_count} items requiring delegated approval, and flagged {cannot_see_count} coverage gaps."
+            )
+
         elif intent_name == "ReadReadinessScoreIntent":
             health = analyze_continuity_health(db, tenant_id)
             score = health.get("readiness_score", 100)

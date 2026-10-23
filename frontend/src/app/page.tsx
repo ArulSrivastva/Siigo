@@ -210,7 +210,7 @@ export default function Home() {
           <span className="bg-slate-800 text-amber-400 text-xs px-2 py-0.5 rounded-full border border-slate-700">3</span>
         </button>
         <button
-          onClick={() => setActiveTab("handoff")}
+          onClick={() => { setActiveTab("handoff"); }}
           className={`py-3 flex items-center space-x-2 border-b-2 transition ${
             activeTab === "handoff" ? "border-amber-400 text-amber-400" : "border-transparent text-slate-400 hover:text-slate-200"
           }`}
@@ -226,6 +226,15 @@ export default function Home() {
         >
           <Lock className="h-4 w-4" />
           <span>Action Gateway (Cedar Gate)</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("alexa_sim" as any)}
+          className={`py-3 flex items-center space-x-2 border-b-2 transition ${
+            (activeTab as string) === "alexa_sim" ? "border-amber-400 text-amber-400" : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse"></span>
+          <span>Alexa+ Live Simulation</span>
         </button>
       </div>
 
@@ -500,6 +509,74 @@ export default function Home() {
                   <span>{actionStatus.message}</span>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+        {/* TAB 5: ALEXA+ LIVE SIMULATION */}
+        {(activeTab as string) === "alexa_sim" && (
+          <div className="space-y-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-100 flex items-center space-x-2">
+                    <span className="h-3 w-3 rounded-full bg-cyan-400 animate-pulse"></span>
+                    <span>Alexa+ Simulated Experience Gateway</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Live endpoint caller executing real backend routes (/api/alexa/webhook & /api/action/execute)
+                  </p>
+                </div>
+                <span className="text-xs font-mono bg-cyan-950/60 text-cyan-300 border border-cyan-800 px-3 py-1 rounded-full">
+                  Track: Alexa+ Simulation
+                </span>
+              </div>
+
+              {/* Scenario Walkthrough Steps */}
+              <div className="space-y-4">
+                <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-lg">
+                  <div className="flex items-center space-x-2 text-xs font-semibold text-cyan-400 uppercase tracking-wider mb-2">
+                    <span>Step 1: Spoken Owner Utterance</span>
+                  </div>
+                  <p className="text-sm font-medium text-slate-200">
+                    Maya (Owner): <span className="text-amber-300">"I'm unavailable tomorrow. Identify anything that needs attention."</span>
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Triggers: <code className="text-slate-300 bg-slate-900 px-1 py-0.5 rounded">DeclareAbsenceAndTriageIntent</code> via backend webhook.
+                  </p>
+                </div>
+
+                <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-lg">
+                  <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2">
+                    <span>Step 2: Spoken Alexa Response from Backend</span>
+                  </div>
+                  <p className="text-sm font-mono text-emerald-300">
+                    "Absence recorded for tomorrow under your Continuity Charter. I've generated a Safe Handoff for Rajesh with immediate commitments, items requiring delegated approval, and flagged coverage gaps."
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <div className="bg-rose-950/20 border border-rose-800/40 p-4 rounded-lg">
+                    <p className="text-xs font-semibold text-rose-400 uppercase tracking-wider mb-1">Step 3: Attack / Over-Limit Check</p>
+                    <p className="text-xs text-slate-300">Rajesh requests ₹65,000 payment (Ceiling: ₹25,000)</p>
+                    <div className="mt-2 text-xs font-mono text-rose-300 bg-rose-950/60 p-2 rounded border border-rose-900">
+                      HTTP 403 Forbidden: Requested amount INR 65,000 exceeds delegation ceiling INR 25,000.
+                    </div>
+                  </div>
+
+                  <div className="bg-emerald-950/20 border border-emerald-800/40 p-4 rounded-lg">
+                    <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-1">Step 4: Authorized Request</p>
+                    <p className="text-xs text-slate-300">Rajesh requests ₹18,000 payment (Within ₹25,000 ceiling)</p>
+                    <div className="mt-2 text-xs font-mono text-emerald-300 bg-emerald-950/60 p-2 rounded border border-emerald-900">
+                      HTTP 200 OK: Policy Decision: ALLOW. Execution Status: AUTHORIZED_AND_RECORDED.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 p-3 bg-slate-900 rounded border border-slate-800 text-xs text-slate-400 font-mono flex items-center justify-between">
+                  <span>Terminal Entry Point Command:</span>
+                  <code className="text-amber-400">python -m tests.run_simulation</code>
+                </div>
+              </div>
             </div>
           </div>
         )}

@@ -370,7 +370,7 @@ def execute_gated_action(req: ExecuteActionRequest, db: Session = Depends(get_db
         on_behalf_of=req.on_behalf_of,
         policy_decision="ALLOW" if allowed else "DENY",
         idempotency_key=req.idempotency_key,
-        status="executed" if allowed else "blocked",
+        status="authorized_and_recorded" if allowed else "blocked",
         executed_at=datetime.datetime.utcnow() if allowed else None
     )
     db.add(action_entry)

@@ -103,7 +103,29 @@ The API documentation is accessible at http://127.0.0.1:8000/docs.
 
 The web interface is accessible at http://localhost:3000.
 
-## Evaluation Baseline
+## Alexa+ Simulated Experience (Hackathon Track Entry Point)
+
+Siigo includes a runnable simulation entry point satisfying the Alexa+ Simulated Experience track:
+- Simulation Script: tests/run_simulation.py
+- Architecture Pattern: Thin-client voice gateway forwarding typed IntentRequests to backend policy and handoff compilers.
+
+### Running the Live Simulation Walkthrough
+
+1. Run the automated scenario via terminal:
+   python -m tests.run_simulation
+
+2. Walkthrough Scenario Executed:
+   - Step 1: Owner operational instruction is ingested and content-hashed.
+   - Step 2: Extracted decision is validated by the deterministic span verifier with exact character offsets.
+   - Step 3: Simulated Alexa+ voice utterance: "I'm unavailable tomorrow. Identify anything that needs attention."
+   - Step 4: Backend /api/alexa/webhook processes DeclareAbsenceAndTriageIntent and returns speech output.
+   - Step 5: Safe Handoff compiled for delegate Rajesh with exact quote citations and honest "What I Cannot See" section.
+   - Step 6: Unauthorized action attempt: Rajesh requests INR 65,000 payment (standing ceiling is INR 25,000) -> Blocked with HTTP 403.
+   - Step 7: Permitted action attempt: Rajesh requests INR 18,000 payment -> HTTP 200 ALLOW (labeled AUTHORIZED_AND_RECORDED).
+   - Step 8: Cryptographic hash-chained audit trail verification.
+
+3. Interactive Browser Demo:
+   Start the application and navigate to http://localhost:3000 -> "Alexa+ Live Simulation".
 
 Evaluated against the 150-message Maya Gold Benchmark using the deterministic baseline engine:
 - Total Ground-Truth Target Claims: 121

@@ -89,7 +89,7 @@ def evaluate_action_policy(
 
         max_amount = scope.get("max_amount_inr")
         if max_amount is not None and amt_val > float(max_amount):
-            return False, f"Denied: Requested amount ₹{amt_val:,.2f} exceeds delegation ceiling ₹{max_amount:,.2f}."
+            return False, f"Denied: Requested amount INR {amt_val:,.2f} exceeds delegation ceiling INR {max_amount:,.2f}."
 
         # Account restriction check
         allowed_account = scope.get("account")
