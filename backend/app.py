@@ -347,6 +347,115 @@ def propose_claim(
 
     return {"status": "proposed", "claim_id": claim.id, "quote_sha256": quote_hash}
 
+@app.get("/api/claims/review")
+def list_claims_for_review(
+    actor: AuthenticatedActor = Depends(get_current_actor),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns extracted claims for the authenticated tenant with their verbatim citations,
+    supporting human review across Proposed, Verified, and Confirmed states.
+    """
+    claims = db.query(Claim).filter(Claim.tenant_id == actor.tenant_id).order_by(Claim.recorded_at.desc()).all()
+    results = []
+    for c in claims:
+        citations = []
+        for ce in c.evidence_citations:
+            citations.append({
+                "quote": ce.exact_quote,
+                "span": [ce.span_start, ce.span_end],
+                "quote_sha256": ce.quote_sha256
+            })
+        results.append({
+            "id": c.id,
+            "kind": c.kind,
+            "subject": c.subject,
+            "state": c.state, # proposed | confirmed | rejected
+            "modality": c.modality,
+            "owner": c.owner_person_id,
+            "source_quote": citations[0]["quote"] if citations else "",
+            "quote_sha256": citations[0]["quote_sha256"] if citations else "",
+            "span": citations[0]["span"] if citations else [0, 0],
+            "last_confirmed_by": c.last_confirmed_by,
+            "recorded_at": c.recorded_at.isoformat()
+        })
+    return results
+
+@app.post("/api/claims/{claim_id}/confirm")
+def confirm_claim(
+    claim_id: str,
+    actor: AuthenticatedActor = Depends(get_current_actor),
+    db: Session = Depends(get_db)
+):
+    """
+    Human Review & Approval Gateway:
+    Transitions an extracted commitment from 'proposed' to 'confirmed'.
+    Enforces that only verified Tier 0 Owner can confirm business decisions.
+    """
+    if actor.trust_tier != TrustTier.OWNER:
+        raise HTTPException(
+            status_code=403, 
+            detail=f"Forbidden: Only verified Owner (Tier 0) can confirm business commitments. Caller is Tier {actor.trust_tier.value}."
+        )
+
+    claim = db.query(Claim).filter(Claim.id == claim_id, Claim.tenant_id == actor.tenant_id).first()
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found.")
+
+    claim.state = "confirmed"
+    claim.last_confirmed_by = actor.display_name
+    claim.last_confirmed_at = datetime.datetime.utcnow()
+    db.commit()
+
+    append_audit_event(db, actor.tenant_id, actor.display_name, "CLAIM_CONFIRMED_BY_HUMAN", {
+        "claim_id": claim.id,
+        "subject": claim.subject,
+        "state": "confirmed",
+        "confirmed_by": actor.display_name
+    })
+
+    return {
+        "status": "confirmed",
+        "claim_id": claim.id,
+        "state": "confirmed",
+        "confirmed_by": actor.display_name
+    }
+
+@app.post("/api/claims/{claim_id}/reject")
+def reject_claim(
+    claim_id: str,
+    actor: AuthenticatedActor = Depends(get_current_actor),
+    db: Session = Depends(get_db)
+):
+    """
+    Human Review & Rejection Gateway:
+    Quarantines or rejects an extracted claim that was hallucinated or superseded.
+    """
+    if actor.trust_tier != TrustTier.OWNER:
+        raise HTTPException(
+            status_code=403, 
+            detail=f"Forbidden: Only verified Owner (Tier 0) can reject commitments. Caller is Tier {actor.trust_tier.value}."
+        )
+
+    claim = db.query(Claim).filter(Claim.id == claim_id, Claim.tenant_id == actor.tenant_id).first()
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found.")
+
+    claim.state = "rejected"
+    db.commit()
+
+    append_audit_event(db, actor.tenant_id, actor.display_name, "CLAIM_REJECTED_BY_HUMAN", {
+        "claim_id": claim.id,
+        "subject": claim.subject,
+        "state": "rejected"
+    })
+
+    return {
+        "status": "rejected",
+        "claim_id": claim.id,
+        "state": "rejected"
+    }
+
 from backend.auth import mint_session_token
 
 @app.get("/api/auth/token")
