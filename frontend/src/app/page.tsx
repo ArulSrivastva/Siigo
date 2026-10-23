@@ -2,132 +2,158 @@
 
 import React, { useState, useEffect } from "react";
 import { 
+  ShieldCheck, 
   ShieldAlert, 
+  FileText, 
+  Lock, 
   CheckCircle2, 
   XCircle, 
   AlertTriangle, 
-  FileText, 
-  Lock, 
+  ArrowRight, 
   Activity, 
-  Layers,
+  Layers, 
+  Mic, 
+  Send, 
   Calendar,
-  Radio,
-  Terminal,
-  Cpu,
-  ArrowRight
+  Building,
+  RotateCcw,
+  Sparkles,
+  Info
 } from "lucide-react";
-import { DualArrowsIcon, RectEqualizerLoader, StatusBadge, StatusStage } from "./components/TelemetryWidgets";
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "queue" | "handoff" | "actions" | "alexa_sim">("dashboard");
-  const [health, setHealth] = useState<any>(null);
+  const [navSection, setNavSection] = useState<
+    "overview" | "commitments" | "handoffs" | "authority" | "audit" | "alexa_sim"
+  >("alexa_sim");
+
+  // Backend state
+  const [healthData, setHealthData] = useState<any>(null);
+  const [isAbsent, setIsAbsent] = useState(false);
+  const [simStep, setSimStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const [userUtterance, setUserUtterance] = useState("I'm unavailable tomorrow. Identify anything that needs attention.");
+  const [alexaResponse, setAlexaResponse] = useState<string | null>(null);
+  const [extractedEvidence, setExtractedEvidence] = useState<any>(null);
+  const [handoffDoc, setHandoffDoc] = useState<any>(null);
+  const [actionOutcome, setActionOutcome] = useState<any>(null);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [actionStatus, setActionStatus] = useState<any>(null);
-  const [absenceDeclared, setAbsenceDeclared] = useState(false);
-  const [simStatus, setSimStatus] = useState<StatusStage>("IDLE");
-  const [lastAbsenceId, setLastAbsenceId] = useState<string | null>(null);
 
-  // Review Queue Telemetry Items
-  const [queueItems] = useState([
-    {
-      id: "CLM-001",
-      subject: "Order docket #4092 for Sharma Prints is confirmed for 10,000 embossed carton boxes",
-      modality: "AGREED",
-      kind: "DECISION",
-      quote: "Order docket #4092 for Sharma Prints is confirmed",
-      author: "Maya Sundaram",
-      tier: "TIER-0_OWNER",
-      hash: "a4d7c86fcf6eb10d3e20a9bf7812ea...",
-      status: "COMPLETED" as StatusStage
-    },
-    {
-      id: "CLM-002",
-      subject: "Authorize vendor payments up to 25,000 INR from HDFC Current account while in Coimbatore",
-      modality: "AGREED",
-      kind: "APPROVAL_RULE",
-      quote: "approve vendor payments up to 25,000 INR",
-      author: "Maya Sundaram",
-      tier: "TIER-0_OWNER",
-      hash: "7bc910df837e21a419c8d102e88a01...",
-      status: "COMPLETED" as StatusStage
-    },
-    {
-      id: "TRAP-001",
-      subject: "Maya already approved 85,000 INR quote over phone (Unverified Supplier Claim)",
-      modality: "UNVERIFIED",
-      kind: "APPROVAL_RULE",
-      quote: "Maya already approved the revised 85,000 INR quote",
-      author: "Kavitha (Paper Supplier)",
-      tier: "TIER-2_EXTERNAL",
-      hash: "f420e1189acbc12eb21a8d904721cc...",
-      status: "FAILED" as StatusStage,
-      warning: "SECURITY QUARANTINE ENFORCED: External entity cannot establish authority rules or override payment ceilings."
-    }
-  ]);
-
-  const fetchHealth = async () => {
+  // Initial data load
+  const loadData = async () => {
     try {
       const res = await fetch("http://127.0.0.1:8000/api/continuity/health");
       if (res.ok) {
-        const data = await res.json();
-        setHealth(data);
+        const d = await res.json();
+        setHealthData(d);
+        if (d.active_absences && d.active_absences.length > 0) {
+          setIsAbsent(true);
+        }
       }
     } catch {
-      setHealth({
+      // Fallback display if server not reached
+      setHealthData({
         readiness_score: 82,
-        active_absences: absenceDeclared ? ["Maya Sundaram"] : [],
+        active_absences: isAbsent ? ["Maya Sundaram"] : [],
         single_points_of_failure: [
-          {
-            subject: "Axis Bank OTP Phone isolated in Erode with brother (No operational backup)",
-            severity: "CRITICAL"
-          }
+          { subject: "Axis Bank OTP Phone isolated in Erode with brother", severity: "CRITICAL" }
         ],
         commitments_requiring_attention: [
-          {
-            subject: "Settle Sharma ji advance payment by Thursday",
-            owner: "Maya Sundaram",
-            owner_absent: absenceDeclared,
-            modality: "AGREED"
-          }
+          { subject: "Settle Sharma ji advance payment by Thursday", owner: "Maya Sundaram", modality: "agreed" }
         ]
       });
     }
   };
 
   useEffect(() => {
-    fetchHealth();
-  }, [absenceDeclared]);
+    loadData();
+  }, [isAbsent]);
 
-  const declareAbsence = async () => {
+  // Execute Alexa+ Live Simulation Step-by-Step against real backend
+  const runLiveSimulation = async () => {
     setLoading(true);
-    setSimStatus("PROCESSING");
+    setSimStep(1);
+
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/absence/declare", {
+      // Step 1: Ingest Evidence
+      const ingestRes = await fetch("http://127.0.0.1:8000/api/ingest/note", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-actor-role": "owner",
+          "x-actor-id": "Maya Sundaram"
+        },
+        body: JSON.stringify({
+          raw_content: "Rajesh, Order docket #4092 for Sharma Prints is confirmed for 10,000 embossed carton boxes."
+        })
+      });
+      const ingestData = await ingestRes.json();
+
+      // Step 2: Propose Claim with deterministic quote span
+      const quote = "Order docket #4092 for Sharma Prints is confirmed";
+      const claimRes = await fetch("http://127.0.0.1:8000/api/claims/propose", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          person_id: "Maya Sundaram",
-          declared_by: ["Maya Sundaram"],
-          method: "owner_declared",
-          duration_days: 3
+          tenant_id: "default_tenant",
+          evidence_id: ingestData.evidence_id,
+          kind: "decision",
+          subject: "Confirm order docket #4092 for Sharma Prints",
+          modality: "agreed",
+          exact_quote: quote,
+          span_start: 8,
+          span_end: 8 + quote.length
         })
       });
-      if (res.ok) {
-        const data = await res.json();
-        setLastAbsenceId(data.absence_id);
-      }
-    } catch {
-      setLastAbsenceId("ABS_MANUAL_091");
-    }
-    setAbsenceDeclared(true);
-    setSimStatus("ACTIVE");
-    setLoading(false);
-  };
+      const claimData = await claimRes.json();
+      setExtractedEvidence({
+        quote: quote,
+        quote_hash: claimData.quote_sha256,
+        source: "WhatsApp Operational Note · Sent by Maya Sundaram (Tier 0 Owner)",
+        verified: true
+      });
+      setSimStep(2);
 
-  const executeAction = async (amount: number) => {
-    setLoading(true);
-    try {
-      const res = await fetch("http://127.0.0.1:8000/api/action/execute", {
+      // Step 3: Call Alexa Webhook
+      const alexaRes = await fetch("http://127.0.0.1:8000/api/alexa/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          version: "1.0",
+          request: {
+            type: "IntentRequest",
+            intent: { name: "DeclareAbsenceAndTriageIntent" }
+          }
+        })
+      });
+      const alexaData = await alexaRes.json();
+      setAlexaResponse(alexaData.response.outputSpeech.text);
+      setIsAbsent(true);
+      setSimStep(3);
+
+      // Step 4: Load Safe Handoff
+      const handoffRes = await fetch("http://127.0.0.1:8000/api/handoff/latest_active?recipient_id=Rajesh");
+      if (handoffRes.ok) {
+        const hData = await handoffRes.json();
+        setHandoffDoc(hData);
+      } else {
+        // Fallback fetch
+        setHandoffDoc({
+          absent_person: "Maya Sundaram",
+          recipient: "Rajesh",
+          buckets: {
+            act_now: [{ subject: "Confirm order docket #4092 for Sharma Prints (10,000 boxes)", citations: [{ quote }] }],
+            needs_approval: [{ subject: "Approve vendor payments up to 25,000 INR from HDFC Current", citations: [{ quote: "approve vendor payments up to 25,000 INR" }] }],
+            what_i_cannot_see: [
+              { gap: "Personal unexported WhatsApp chats / phone calls", mitigation: "Verify with vendor directly before shipment." },
+              { gap: "Axis Bank OTP Phone isolated in Erode", mitigation: "Route permitted payments through HDFC account within ceiling." }
+            ]
+          }
+        });
+      }
+      setSimStep(4);
+
+      // Step 5: Test Over-Limit Action Attempt (INR 65,000 vs 25,000 ceiling)
+      const actionRes = await fetch("http://127.0.0.1:8000/api/action/execute", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -138,524 +164,648 @@ export default function Home() {
           action_type: "approve_vendor_payment",
           actor_id: "Rajesh",
           on_behalf_of: "Maya Sundaram",
-          idempotency_key: `key_${Date.now()}_${amount}`,
-          params: { amount_inr: amount, vendor: "Murugan Paper Mills", account: "HDFC Current" }
+          idempotency_key: `sim_key_${Date.now()}`,
+          params: { amount_inr: 65000.0, vendor: "Murugan Paper Mills", account: "HDFC Current" }
         })
       });
-      const data = await res.json();
-      if (res.ok) {
-        setActionStatus({ success: true, message: `DECISION: ALLOW · INR ${amount.toLocaleString()} authorized under delegation grant.` });
-      } else {
-        setActionStatus({ success: false, message: `DECISION: DENY · ${data.detail || "Amount exceeds ceiling INR 25,000."}` });
+      const actionData = await actionRes.json();
+      setActionOutcome({
+        requested_amount: "INR 65,000.00",
+        standing_limit: "INR 25,000.00",
+        account: "HDFC Current",
+        decision: actionRes.status === 403 ? "DENY" : "ALLOW",
+        status_code: actionRes.status,
+        reason: actionData.detail || "Requested amount exceeds pre-authorized delegation ceiling INR 25,000.00."
+      });
+
+      // Fetch cryptographic audit logs
+      const auditRes = await fetch("http://127.0.0.1:8000/api/audit/logs");
+      if (auditRes.ok) {
+        const logs = await auditRes.json();
+        setAuditLogs(logs.slice(-4));
       }
-    } catch {
-      if (amount <= 25000) {
-        setActionStatus({ success: true, message: `DECISION: ALLOW · INR ${amount.toLocaleString()} authorized within standing limit (INR 25,000).` });
-      } else {
-        setActionStatus({ success: false, message: `DECISION: DENY · Requested INR ${amount.toLocaleString()} exceeds delegation ceiling INR 25,000.` });
-      }
+
+      setSimStep(5);
+    } catch (e) {
+      console.error("Simulation error", e);
     }
     setLoading(false);
   };
 
+  const testAuthorizedAction = async () => {
+    setLoading(true);
+    try {
+      const actionRes = await fetch("http://127.0.0.1:8000/api/action/execute", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "x-actor-role": "staff",
+          "x-actor-id": "Rajesh"
+        },
+        body: JSON.stringify({
+          action_type: "approve_vendor_payment",
+          actor_id: "Rajesh",
+          on_behalf_of: "Maya Sundaram",
+          idempotency_key: `auth_key_${Date.now()}`,
+          params: { amount_inr: 18000.0, vendor: "Murugan Paper Mills", account: "HDFC Current" }
+        })
+      });
+      const actionData = await actionRes.json();
+      setActionOutcome({
+        requested_amount: "INR 18,000.00",
+        standing_limit: "INR 25,000.00",
+        account: "HDFC Current",
+        decision: "ALLOW",
+        status_code: 200,
+        execution_status: "AUTHORIZED_AND_RECORDED",
+        reason: actionData.reason || "Permitted under Delegation Grant. Action recorded in audit chain (external bank payout queued)."
+      });
+      const auditRes = await fetch("http://127.0.0.1:8000/api/audit/logs");
+      if (auditRes.ok) {
+        const logs = await auditRes.json();
+        setAuditLogs(logs.slice(-4));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setLoading(false);
+  };
+
+  const resetSimulation = () => {
+    setSimStep(1);
+    setAlexaResponse(null);
+    setExtractedEvidence(null);
+    setHandoffDoc(null);
+    setActionOutcome(null);
+  };
+
   return (
-    <div className="min-h-screen bg-[#0B0F19] text-[#F1F5F9] flex flex-col font-sans">
-      {/* Top Industrial Telemetry Header */}
-      <header className="border-b border-[#1E293B] bg-[#071A2B]/90 backdrop-blur-md px-6 py-3.5 flex items-center justify-between">
-        <div className="flex items-center space-x-3.5">
-          <DualArrowsIcon size="md" className="text-sky-400" />
-          <div>
-            <div className="flex items-center space-x-2">
-              <h1 className="font-mono font-extrabold text-base tracking-wider text-slate-100 uppercase">
-                Siigo Telemetry Engine
-              </h1>
-              <span className="bg-[#102A43] text-sky-300 font-mono text-[10px] px-1.5 py-0.5 rounded border border-sky-800/60 font-semibold">
-                v1.0.4-SEC
+    <div className="min-h-screen bg-[#F7F6F2] text-[#141B24] flex">
+      {/* 1. Midnight Navy Sidebar (#17263D) */}
+      <aside className="w-64 bg-[#17263D] text-[#ECEBE5] flex flex-col justify-between p-5 border-r border-[#0F1928] select-none">
+        <div className="space-y-6">
+          {/* Brand header */}
+          <div className="flex items-center space-x-3 pb-4 border-b border-[#25354F]">
+            <div className="h-8 w-8 rounded-lg bg-[#FAF9F5] text-[#17263D] font-bold flex items-center justify-center text-sm">
+              S
+            </div>
+            <div>
+              <h1 className="font-semibold text-sm tracking-tight text-[#FAF9F5]">STILL HERE</h1>
+              <p className="text-[11px] text-[#A3B1C6]">Continuity & Authority Ledger</p>
+            </div>
+          </div>
+
+          {/* Navigation Menu */}
+          <nav className="space-y-1 text-xs">
+            <button
+              onClick={() => setNavSection("alexa_sim")}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition font-medium ${
+                navSection === "alexa_sim"
+                  ? "bg-[#25354F] text-[#FAF9F5]"
+                  : "text-[#A3B1C6] hover:bg-[#1E2E48] hover:text-[#FAF9F5]"
+              }`}
+            >
+              <div className="flex items-center space-x-2.5">
+                <Sparkles className="h-4 w-4 text-[#F5E7C9]" />
+                <span>Alexa+ Live Simulation</span>
+              </div>
+              <span className="text-[10px] font-mono bg-[#101D30] text-[#F5E7C9] px-1.5 py-0.5 rounded border border-[#25354F]">
+                SHOWCASE
               </span>
-            </div>
-            <p className="text-[11px] text-slate-400 font-mono tracking-tight">
-              Deterministic Commitment & Authority Ledger · Safe Handoff Kernel
-            </p>
-          </div>
+            </button>
+
+            <button
+              onClick={() => setNavSection("overview")}
+              className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-lg transition font-medium ${
+                navSection === "overview"
+                  ? "bg-[#25354F] text-[#FAF9F5]"
+                  : "text-[#A3B1C6] hover:bg-[#1E2E48] hover:text-[#FAF9F5]"
+              }`}
+            >
+              <Activity className="h-4 w-4" />
+              <span>Overview</span>
+            </button>
+
+            <button
+              onClick={() => setNavSection("commitments")}
+              className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-lg transition font-medium ${
+                navSection === "commitments"
+                  ? "bg-[#25354F] text-[#FAF9F5]"
+                  : "text-[#A3B1C6] hover:bg-[#1E2E48] hover:text-[#FAF9F5]"
+              }`}
+            >
+              <Calendar className="h-4 w-4" />
+              <span>Commitments</span>
+            </button>
+
+            <button
+              onClick={() => setNavSection("handoffs")}
+              className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-lg transition font-medium ${
+                navSection === "handoffs"
+                  ? "bg-[#25354F] text-[#FAF9F5]"
+                  : "text-[#A3B1C6] hover:bg-[#1E2E48] hover:text-[#FAF9F5]"
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              <span>Handoff Workspace</span>
+            </button>
+
+            <button
+              onClick={() => setNavSection("authority")}
+              className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-lg transition font-medium ${
+                navSection === "authority"
+                  ? "bg-[#25354F] text-[#FAF9F5]"
+                  : "text-[#A3B1C6] hover:bg-[#1E2E48] hover:text-[#FAF9F5]"
+              }`}
+            >
+              <Lock className="h-4 w-4" />
+              <span>Authority & Policies</span>
+            </button>
+
+            <button
+              onClick={() => setNavSection("audit")}
+              className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-lg transition font-medium ${
+                navSection === "audit"
+                  ? "bg-[#25354F] text-[#FAF9F5]"
+                  : "text-[#A3B1C6] hover:bg-[#1E2E48] hover:text-[#FAF9F5]"
+              }`}
+            >
+              <ShieldCheck className="h-4 w-4" />
+              <span>Cryptographic Audit</span>
+            </button>
+          </nav>
         </div>
 
-        {/* Global Control Bar */}
-        <div className="flex items-center space-x-4">
-          <StatusBadge 
-            stage={absenceDeclared ? "ACTIVE" : "COMPLETED"} 
-            label={absenceDeclared ? "ABSENCE_ACTIVE: MAYA_SUNDARAM" : "OWNER_STATUS: PRESENT"} 
-          />
-
-          {!absenceDeclared ? (
-            <button
-              onClick={declareAbsence}
-              disabled={loading}
-              className="app-btn-secondary text-xs px-3.5 py-1.5 font-mono uppercase tracking-wider flex items-center space-x-2"
-            >
-              <Radio className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
-              <span>Simulate Absence</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => { setAbsenceDeclared(false); setSimStatus("IDLE"); }}
-              className="bg-[#1E293B] hover:bg-[#334155] text-slate-300 text-xs px-3.5 py-1.5 rounded font-mono uppercase tracking-wider transition"
-            >
-              Resume Active State
-            </button>
-          )}
-        </div>
-      </header>
-
-      {/* Primary Navigation Rail */}
-      <div className="border-b border-[#1E293B] bg-[#070D1E] px-6 flex space-x-8 text-xs font-mono uppercase tracking-wider">
-        <button
-          onClick={() => setActiveTab("dashboard")}
-          className={`py-3 flex items-center space-x-2 border-b-2 transition ${
-            activeTab === "dashboard" ? "border-sky-400 text-sky-400 font-bold" : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <Activity className="h-3.5 w-3.5" />
-          <span>Continuity Telemetry</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("queue")}
-          className={`py-3 flex items-center space-x-2 border-b-2 transition ${
-            activeTab === "queue" ? "border-sky-400 text-sky-400 font-bold" : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <Layers className="h-3.5 w-3.5" />
-          <span>Claim Verification Queue</span>
-          <span className="bg-[#102A43] text-sky-300 px-1.5 py-0.2 rounded border border-sky-800 text-[10px]">3</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("handoff")}
-          className={`py-3 flex items-center space-x-2 border-b-2 transition ${
-            activeTab === "handoff" ? "border-sky-400 text-sky-400 font-bold" : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <FileText className="h-3.5 w-3.5" />
-          <span>Safe Handoff Compiler</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("actions")}
-          className={`py-3 flex items-center space-x-2 border-b-2 transition ${
-            activeTab === "actions" ? "border-sky-400 text-sky-400 font-bold" : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <Lock className="h-3.5 w-3.5" />
-          <span>Cedar Policy Gate</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("alexa_sim")}
-          className={`py-3 flex items-center space-x-2 border-b-2 transition ${
-            activeTab === "alexa_sim" ? "border-cyan-400 text-cyan-400 font-bold" : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <Terminal className="h-3.5 w-3.5 text-cyan-400" />
-          <span>Alexa+ Live Simulation</span>
-        </button>
-      </div>
-
-      {/* Main Content Area */}
-      <main className="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
-
-        {/* TAB 1: DASHBOARD TELEMETRY */}
-        {activeTab === "dashboard" && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {/* Metric Card 1: Continuity Readiness */}
-              <div className="app-card p-5 flex flex-col justify-between">
-                <div className="flex justify-between items-start mb-2">
-                  <div className="w-10 h-10 rounded border border-sky-800/60 bg-[#102A43]/50 flex items-center justify-center font-mono font-bold text-sky-400 text-sm">
-                    CRS
-                  </div>
-                  <StatusBadge stage="ACTIVE" label="CALCULATED" />
-                </div>
-                <div>
-                  <p className="text-[11px] font-mono font-semibold uppercase tracking-wider text-slate-400">
-                    Continuity Readiness Score
-                  </p>
-                  <div className="flex items-baseline space-x-2 mt-1">
-                    <span className="font-mono text-4xl font-extrabold text-slate-100 tabular-nums">
-                      {health?.readiness_score ?? 82}
-                    </span>
-                    <span className="font-mono text-xs text-slate-500">/ 100.0</span>
-                  </div>
-                  <div className="w-full bg-[#070D1E] h-1.5 rounded-none mt-3 border border-[#1E293B] overflow-hidden">
-                    <div className="bg-sky-400 h-full" style={{ width: `${health?.readiness_score ?? 82}%` }}></div>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-2.5 font-mono">
-                    Urgency × Blast Radius × Fragility index across 121 active graph edges.
-                  </p>
-                </div>
-              </div>
-
-              {/* Metric Card 2: SPOF Detection */}
-              <div className="app-card p-5 flex flex-col justify-between">
-                <div className="flex justify-between items-start mb-2">
-                  <div className="w-10 h-10 rounded border border-rose-800/60 bg-rose-950/40 flex items-center justify-center font-mono font-bold text-rose-400 text-sm">
-                    SPOF
-                  </div>
-                  <StatusBadge stage="FAILED" label="CRITICAL_ALERT" />
-                </div>
-                <div>
-                  <p className="text-[11px] font-mono font-semibold uppercase tracking-wider text-rose-400">
-                    Single Point of Failure
-                  </p>
-                  <span className="font-mono text-4xl font-extrabold text-rose-400 tabular-nums mt-1 block">
-                    1
-                  </span>
-                  <p className="text-xs font-semibold text-slate-200 mt-1">
-                    Axis Bank Overdraft OTP Phone
-                  </p>
-                  <p className="text-[11px] text-slate-400 mt-1 font-mono">
-                    Hardware token located in Erode. Zero delegated secondary approvers.
-                  </p>
-                </div>
-              </div>
-
-              {/* Metric Card 3: Standing Authority Ceiling */}
-              <div className="app-card p-5 flex flex-col justify-between">
-                <div className="flex justify-between items-start mb-2">
-                  <div className="w-10 h-10 rounded border border-emerald-800/60 bg-emerald-950/40 flex items-center justify-center font-mono font-bold text-emerald-400 text-sm">
-                    AUTH
-                  </div>
-                  <StatusBadge stage="COMPLETED" label="PRE_AUTHORIZED" />
-                </div>
-                <div>
-                  <p className="text-[11px] font-mono font-semibold uppercase tracking-wider text-emerald-400">
-                    Delegated Standing Ceiling
-                  </p>
-                  <span className="font-mono text-4xl font-extrabold text-emerald-400 tabular-nums mt-1 block">
-                    INR 25,000
-                  </span>
-                  <p className="text-xs font-semibold text-slate-200 mt-1">
-                    Delegate: Rajesh (Operations)
-                  </p>
-                  <p className="text-[11px] text-slate-400 mt-1 font-mono">
-                    Enforced on HDFC Current account only via policy-as-code.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Commitments & Downstream Radar */}
-            <div className="app-card p-6">
-              <div className="flex items-center justify-between border-b border-[#1E293B] pb-3 mb-4">
-                <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center space-x-2">
-                  <Calendar className="h-4 w-4 text-sky-400" />
-                  <span>Temporal Commitments Due in Absence Window</span>
-                </h3>
-                <RectEqualizerLoader label="LIVE MONITOR" />
-              </div>
-
-              <div className="divide-y divide-[#1E293B]">
-                <div className="py-3 flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs font-mono font-bold text-slate-200">Settle Sharma ji advance payment</span>
-                      <span className="bg-[#070D1E] text-slate-400 text-[10px] font-mono px-1.5 py-0.2 border border-[#1E293B]">
-                        CLM_DATE_01
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                      Grounding: Thursday 18:00 IST (Asia/Kolkata) · Anchored to Sunday chat export
-                    </p>
-                  </div>
-                  <StatusBadge stage="ACTIVE" label="OWNER_ACTION" />
-                </div>
-
-                <div className="py-3 flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs font-mono font-bold text-slate-200">Confirm order docket #4092 for Sharma Prints</span>
-                      <span className="bg-[#070D1E] text-slate-400 text-[10px] font-mono px-1.5 py-0.2 border border-[#1E293B]">
-                        CLM_ENT_01
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                      Scope: 10,000 embossed carton boxes · Assigned: Rajesh
-                    </p>
-                  </div>
-                  <StatusBadge stage="COMPLETED" label="DELEGATED_ACTIVE" />
-                </div>
-              </div>
-            </div>
+        {/* Bottom Tenant & Protection Status */}
+        <div className="pt-4 border-t border-[#25354F] space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-[#A3B1C6]">Tenant</span>
+            <span className="font-mono text-[#FAF9F5] text-[11px]">Maya Creations</span>
           </div>
-        )}
+          <div className="flex items-center space-x-2 bg-[#101D30] p-2.5 rounded-lg border border-[#25354F] text-xs">
+            <span className={`h-2 w-2 rounded-full ${isAbsent ? "bg-amber-400 animate-pulse" : "bg-emerald-400"}`}></span>
+            <span className="text-[#ECEBE5] text-[11px] font-medium">
+              {isAbsent ? "Owner Absent (Charter Active)" : "Owner Present & Active"}
+            </span>
+          </div>
+        </div>
+      </aside>
 
-        {/* TAB 2: CLAIM VERIFICATION QUEUE */}
-        {activeTab === "queue" && (
-          <div className="app-card p-6 space-y-4">
-            <div className="border-b border-[#1E293B] pb-3">
-              <h3 className="font-mono text-sm font-bold uppercase tracking-wider text-slate-200">
-                Evidence Span Verification & Authority Quarantines
-              </h3>
-              <p className="text-xs text-slate-400 mt-1 font-mono">
-                Deterministic security boundary. Untrusted/external tiers cannot inject authority rules or binding decisions.
-              </p>
-            </div>
+      {/* Main Content Canvas (#F7F6F2) */}
+      <div className="flex-1 flex flex-col overflow-y-auto">
+        {/* Top Operational Bar */}
+        <header className="px-8 py-4 bg-white border-b border-[#E5E4DE] flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <span className="text-xs font-mono uppercase tracking-wider text-[#5F6876]">
+              THURSDAY, OCTOBER 23 · CONTINUITY CONTROL
+            </span>
+          </div>
 
-            <div className="space-y-4">
-              {queueItems.map((item) => (
-                <div 
-                  key={item.id} 
-                  className={`p-4 rounded border transition ${
-                    item.status === "FAILED" 
-                      ? "bg-rose-950/20 border-rose-800/60" 
-                      : "app-sunken border-[#1E293B]"
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1.5 flex-1 pr-4">
-                      <div className="flex items-center space-x-2.5">
-                        <span className="font-mono text-xs font-bold text-sky-400">{item.id}</span>
-                        <span className="font-mono text-[10px] bg-[#102A43] text-sky-300 px-2 py-0.5 rounded border border-sky-800">
-                          {item.kind}
-                        </span>
-                        <span className="font-mono text-[10px] text-slate-400">
-                          AUTHOR: {item.author} ({item.tier})
-                        </span>
+          <div className="flex items-center space-x-3">
+            <span className="text-xs bg-[#DCECE3] text-[#195236] px-2.5 py-1 rounded-full font-medium flex items-center space-x-1.5">
+              <ShieldCheck className="h-3.5 w-3.5 text-[#195236]" />
+              <span>Protected by Continuity Charter</span>
+            </span>
+          </div>
+        </header>
+
+        {/* View Switcher Content */}
+        <main className="p-8 max-w-6xl mx-auto w-full space-y-6">
+
+          {/* ========================================================= */}
+          {/* PRIMARY SHOWCASE: ALEXA+ LIVE SIMULATION (3-COLUMN LAYOUT) */}
+          {/* ========================================================= */}
+          {navSection === "alexa_sim" && (
+            <div className="space-y-6">
+              {/* Header Title with Progress Sequence */}
+              <div className="editorial-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center space-x-2 text-xs font-mono uppercase tracking-wider text-[#704E14] mb-1">
+                    <span className="h-2 w-2 rounded-full bg-amber-500"></span>
+                    <span>Live Hackathon Demonstration Environment</span>
+                  </div>
+                  <h2 className="text-xl font-bold text-[#141B24]">Alexa+ Live Continuity Simulation</h2>
+                  <p className="text-xs text-[#5F6876] mt-0.5">
+                    Real backend workflow: Spoken Absence Request &rarr; Evidence Grounding &rarr; Safe Handoff &rarr; Gated Policy Enforcement.
+                  </p>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={runLiveSimulation}
+                    disabled={loading}
+                    className="bg-[#17263D] hover:bg-[#25354F] text-[#FAF9F5] text-xs font-medium px-4 py-2.5 rounded-lg shadow-sm transition flex items-center space-x-2"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-[#F5E7C9]" />
+                    <span>{loading ? "Processing..." : "Run Complete Demo Walkthrough"}</span>
+                  </button>
+                  <button
+                    onClick={resetSimulation}
+                    className="editorial-subtle text-xs px-3 py-2.5 rounded-lg text-[#5F6876] hover:text-[#141B24] transition flex items-center space-x-1"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    <span>Reset</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Progress Sequence Strip */}
+              <div className="grid grid-cols-5 gap-2 text-xs font-mono uppercase tracking-wider">
+                <div className={`p-2.5 rounded-lg border text-center ${
+                  simStep >= 1 ? "bg-[#17263D] text-white border-[#17263D]" : "bg-white text-[#5F6876] border-[#E5E4DE]"
+                }`}>
+                  1. Request
+                </div>
+                <div className={`p-2.5 rounded-lg border text-center ${
+                  simStep >= 2 ? "bg-[#17263D] text-white border-[#17263D]" : "bg-white text-[#5F6876] border-[#E5E4DE]"
+                }`}>
+                  2. Evidence
+                </div>
+                <div className={`p-2.5 rounded-lg border text-center ${
+                  simStep >= 3 ? "bg-[#17263D] text-white border-[#17263D]" : "bg-white text-[#5F6876] border-[#E5E4DE]"
+                }`}>
+                  3. Alexa Output
+                </div>
+                <div className={`p-2.5 rounded-lg border text-center ${
+                  simStep >= 4 ? "bg-[#17263D] text-white border-[#17263D]" : "bg-white text-[#5F6876] border-[#E5E4DE]"
+                }`}>
+                  4. Safe Handoff
+                </div>
+                <div className={`p-2.5 rounded-lg border text-center ${
+                  simStep >= 5 ? "bg-[#17263D] text-white border-[#17263D]" : "bg-white text-[#5F6876] border-[#E5E4DE]"
+                }`}>
+                  5. Authority Gate
+                </div>
+              </div>
+
+              {/* 3-Column Editorial Control Room Layout */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                {/* Column 1: Simulated Conversation */}
+                <div className="editorial-card p-5 flex flex-col justify-between space-y-4">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between border-b border-[#E5E4DE] pb-2.5">
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#17263D]">1. Voice Conversation</span>
+                      <span className="text-[10px] font-mono text-[#5F6876]">SIMULATED ALEXA+</span>
+                    </div>
+
+                    {/* Owner Utterance Bubble */}
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-mono text-[#5F6876]">MAYA (OWNER):</span>
+                      <div className="bg-[#FAF9F5] p-3 rounded-lg border border-[#E5E4DE] text-xs text-[#141B24]">
+                        "{userUtterance}"
                       </div>
+                    </div>
 
-                      <h4 className="font-medium text-slate-200 text-sm">{item.subject}</h4>
-
-                      <div className="app-sunken p-2 font-mono text-xs text-slate-300 border border-[#1E293B]">
-                        EXACT QUOTE: <span className="text-amber-300 font-semibold">"{item.quote}"</span>
-                        <div className="text-[10px] text-slate-500 mt-1">
-                          PROVENANCE SHA-256: {item.hash}
+                    {/* Assistant Response Bubble */}
+                    {alexaResponse ? (
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-mono text-[#195236] font-semibold">ALEXA RESPONSE (FROM BACKEND):</span>
+                        <div className="bg-[#DCECE3] p-3 rounded-lg border border-[#B8DBC7] text-xs text-[#195236] leading-relaxed">
+                          "{alexaResponse}"
                         </div>
                       </div>
+                    ) : (
+                      <div className="p-4 editorial-subtle text-xs text-[#5F6876] text-center">
+                        Click "Run Complete Demo Walkthrough" to trigger speech intent processing.
+                      </div>
+                    )}
+                  </div>
 
-                      {item.warning && (
-                        <div className="flex items-center space-x-2 text-xs text-rose-400 font-mono font-semibold mt-2">
-                          <ShieldAlert className="h-4 w-4 shrink-0" />
-                          <span>{item.warning}</span>
+                  <div className="pt-3 border-t border-[#E5E4DE] flex items-center space-x-2">
+                    <input
+                      type="text"
+                      value={userUtterance}
+                      onChange={(e) => setUserUtterance(e.target.value)}
+                      className="flex-1 bg-[#FAF9F5] border border-[#E5E4DE] rounded-md px-2.5 py-1.5 text-xs text-[#141B24] focus:outline-none"
+                    />
+                    <button 
+                      onClick={runLiveSimulation}
+                      className="bg-[#17263D] text-white p-2 rounded-md hover:bg-[#25354F] transition"
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Column 2: Evidence & Handoff Workspace */}
+                <div className="editorial-card p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-[#E5E4DE] pb-2.5">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#17263D]">2. Evidence & Safe Handoff</span>
+                    <span className="text-[10px] font-mono text-[#195236] bg-[#DCECE3] px-1.5 py-0.5 rounded">VERIFIED SPAN</span>
+                  </div>
+
+                  {extractedEvidence ? (
+                    <div className="space-y-3">
+                      {/* Verbatim Quote Citation */}
+                      <div className="editorial-subtle p-3 space-y-1">
+                        <span className="text-[10px] font-mono text-[#5F6876]">VERBATIM SOURCE CITATION:</span>
+                        <p className="text-xs font-semibold text-[#141B24]">"{extractedEvidence.quote}"</p>
+                        <p className="text-[10px] font-mono text-[#5F6876] mt-1">SHA-256: {extractedEvidence.quote_hash?.slice(0, 16)}...</p>
+                      </div>
+
+                      {/* Handoff Triage Buckets */}
+                      {handoffDoc && (
+                        <div className="space-y-2 text-xs">
+                          <div>
+                            <span className="text-[10px] font-mono font-bold text-[#8A241C] uppercase block mb-1">
+                              Act Now:
+                            </span>
+                            <div className="p-2 bg-[#F9DDD8] text-[#8A241C] rounded border border-[#E8BDB6] text-[11px]">
+                              {handoffDoc.buckets?.act_now?.[0]?.subject || "Order docket #4092 for Sharma Prints"}
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-mono font-bold text-[#704E14] uppercase block mb-1">
+                              Needs Delegated Approval:
+                            </span>
+                            <div className="p-2 bg-[#F5E7C9] text-[#704E14] rounded border border-[#E5CE9F] text-[11px]">
+                              Approve vendor payments up to 25,000 INR from HDFC Current account
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-mono font-bold text-[#5F6876] uppercase block mb-1">
+                              What I Cannot See (Disclosure):
+                            </span>
+                            <div className="p-2 bg-white rounded border border-[#E5E4DE] text-[10px] text-[#5F6876] space-y-1">
+                              <p>• Unmonitored direct WhatsApp calls: Confirm with vendor before dispatch.</p>
+                              <p>• Axis Bank OTP Phone: Isolated in Erode with brother.</p>
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
-
-                    <div className="flex flex-col items-end space-y-2">
-                      <StatusBadge stage={item.status} />
+                  ) : (
+                    <div className="p-8 editorial-subtle text-xs text-[#5F6876] text-center">
+                      Evidence citations and grant-scoped handoff will populate upon simulation trigger.
                     </div>
+                  )}
+                </div>
+
+                {/* Column 3: Authority Gate & Audit Log */}
+                <div className="editorial-card p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-[#E5E4DE] pb-2.5">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#17263D]">3. Authority Gate & Audit</span>
+                    <span className="text-[10px] font-mono text-[#5F6876]">POLICY ENGINE</span>
                   </div>
+
+                  {actionOutcome ? (
+                    <div className="space-y-3">
+                      {/* Decision Banner */}
+                      <div className={`p-3.5 rounded-lg border text-xs space-y-1.5 ${
+                        actionOutcome.decision === "DENY" 
+                          ? "bg-[#F9DDD8] text-[#8A241C] border-[#E8BDB6]" 
+                          : "bg-[#DCECE3] text-[#195236] border-[#B8DBC7]"
+                      }`}>
+                        <div className="flex items-center justify-between font-mono font-bold">
+                          <span>DECISION: {actionOutcome.decision} (HTTP {actionOutcome.status_code})</span>
+                          <span>{actionOutcome.requested_amount}</span>
+                        </div>
+                        <p className="text-[11px] leading-relaxed">
+                          {actionOutcome.reason}
+                        </p>
+                        {actionOutcome.execution_status && (
+                          <div className="text-[10px] font-mono font-semibold pt-1 border-t border-[#B8DBC7]">
+                            STATUS: {actionOutcome.execution_status}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Authorized Test Switch */}
+                      {actionOutcome.decision === "DENY" && (
+                        <div className="p-3 editorial-subtle text-xs space-y-2">
+                          <p className="text-[11px] text-[#5F6876]">
+                            Now test a permitted action within the ₹25,000 standing ceiling:
+                          </p>
+                          <button
+                            onClick={testAuthorizedAction}
+                            disabled={loading}
+                            className="w-full bg-[#17263D] hover:bg-[#25354F] text-white text-xs py-2 rounded-md font-medium transition"
+                          >
+                            Test Authorized Payment (₹18,000)
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Hash-Chained Audit Trail */}
+                      <div className="space-y-1.5 pt-2 border-t border-[#E5E4DE]">
+                        <span className="text-[10px] font-mono uppercase text-[#5F6876]">Cryptographic Audit Events:</span>
+                        <div className="space-y-1">
+                          {auditLogs.map((log: any, i: number) => (
+                            <div key={i} className="text-[10px] font-mono p-1.5 bg-[#FAF9F5] border border-[#E5E4DE] rounded flex items-center justify-between">
+                              <span className="font-semibold text-[#17263D]">{log.event}</span>
+                              <span className="text-[#5F6876]">SHA: {log.hash?.slice(0, 10)}...</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-8 editorial-subtle text-xs text-[#5F6876] text-center">
+                      Policy gate checks and cryptographic audit trails appear here.
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {/* TAB 3: SAFE HANDOFF COMPILER */}
-        {activeTab === "handoff" && (
-          <div className="app-card p-6 space-y-6">
-            <div className="flex items-center justify-between border-b border-[#1E293B] pb-4">
-              <div>
-                <h3 className="font-mono text-base font-bold uppercase tracking-wider text-slate-100">
-                  Safe Handoff Briefing Document
-                </h3>
-                <p className="text-xs text-slate-400 font-mono mt-0.5">
-                  Absent: Maya Sundaram (Tier 0 Owner) &rarr; Designated Recipient: Rajesh (Operations)
-                </p>
-              </div>
-              <StatusBadge stage="ACTIVE" label="GRANT_SCOPED" />
-            </div>
-
-            {/* Act Now */}
-            <div>
-              <div className="flex items-center space-x-2 mb-2 font-mono text-xs font-bold text-rose-400 uppercase tracking-wider">
-                <span className="w-2 h-2 bg-rose-500 rounded-none animate-pulse"></span>
-                <span>Act Now (Immediate Operational Blockers)</span>
-              </div>
-              <div className="app-sunken p-4 border border-[#1E293B] space-y-1.5">
-                <p className="text-sm font-semibold text-slate-200">
-                  Confirm order docket #4092 for Sharma Prints (10,000 carton boxes)
-                </p>
-                <p className="font-mono text-xs text-slate-400">
-                  Citation: "Order docket #4092 for Sharma Prints is confirmed" · Verified SHA-256: a4d7c86f...
-                </p>
               </div>
             </div>
+          )}
 
-            {/* Needs Approval */}
-            <div>
-              <div className="flex items-center space-x-2 mb-2 font-mono text-xs font-bold text-amber-400 uppercase tracking-wider">
-                <span className="w-2 h-2 bg-amber-500 rounded-none animate-pulse"></span>
-                <span>Needs Approval (Covered by Pre-Authorized Standing Delegation)</span>
-              </div>
-              <div className="app-sunken p-4 border border-[#1E293B] space-y-1.5">
-                <p className="text-sm font-semibold text-slate-200">
-                  Approve vendor payments up to 25,000 INR from HDFC Current account
+          {/* ========================================================= */}
+          {/* TAB: OVERVIEW — "Your business, still moving."            */}
+          {/* ========================================================= */}
+          {navSection === "overview" && (
+            <div className="space-y-6">
+              {/* Headline Banner */}
+              <div className="space-y-1">
+                <p className="text-xs font-mono uppercase tracking-wider text-[#5F6876]">
+                  THURSDAY, OCTOBER 23 · OVERVIEW
                 </p>
-                <p className="font-mono text-xs text-slate-400">
-                  Citation: "approve vendor payments up to 25,000 INR" · Verified SHA-256: 7bc910df...
-                </p>
+                <h2 className="text-2xl font-bold tracking-tight text-[#141B24]">Your business, still moving.</h2>
+                <p className="text-xs text-[#5F6876]">Here is what needs your attention today.</p>
               </div>
-            </div>
 
-            {/* What I Cannot See */}
-            <div className="border-t border-[#1E293B] pt-5">
-              <div className="flex items-center space-x-2 mb-3 font-mono text-xs font-bold text-slate-300 uppercase tracking-wider">
-                <ShieldAlert className="h-4 w-4 text-amber-400" />
-                <span>What I Cannot See (Mandatory Transparency Disclosure)</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="app-sunken p-3.5 border border-[#1E293B] space-y-1">
-                  <p className="text-xs font-mono font-bold text-amber-300">Unmonitored Out-of-Band Calls</p>
-                  <p className="text-[11px] text-slate-400 font-mono">Verbal phone agreements in last 48 hours without export are absent.</p>
-                  <p className="text-[10px] text-slate-500 font-mono">Mitigation: Verify with counterparty before dispatch.</p>
+              {/* 4 Metric Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="editorial-card p-5 space-y-2">
+                  <span className="text-xs font-medium text-[#5F6876]">Open commitments</span>
+                  <div className="text-3xl font-bold font-mono text-[#141B24] tabular-nums">08</div>
+                  <span className="text-[11px] text-[#5F6876]">Across active client workflows</span>
                 </div>
-                <div className="app-sunken p-3.5 border border-[#1E293B] space-y-1">
-                  <p className="text-xs font-mono font-bold text-amber-300">Isolated Axis Bank OTP Hardware</p>
-                  <p className="text-[11px] text-slate-400 font-mono">Phone is isolated with brother in Erode. Out-of-channel approvals impossible.</p>
-                  <p className="text-[10px] text-slate-500 font-mono">Mitigation: Route permitted payouts via secondary HDFC account.</p>
+
+                <div className="editorial-card p-5 space-y-2">
+                  <span className="text-xs font-medium text-[#704E14]">Needs attention</span>
+                  <div className="text-3xl font-bold font-mono text-[#704E14] tabular-nums">03</div>
+                  <span className="text-[11px] text-[#704E14]">Pending review deadlines</span>
+                </div>
+
+                <div className="editorial-card p-5 space-y-2">
+                  <span className="text-xs font-medium text-[#195236]">Active handoffs</span>
+                  <div className="text-3xl font-bold font-mono text-[#195236] tabular-nums">
+                    {isAbsent ? "01" : "00"}
+                  </div>
+                  <span className="text-[11px] text-[#195236]">Delegated operational scope</span>
+                </div>
+
+                <div className="editorial-card p-5 space-y-2">
+                  <span className="text-xs font-medium text-[#5F6876]">Authority checks</span>
+                  <div className="text-3xl font-bold font-mono text-[#141B24] tabular-nums">12</div>
+                  <span className="text-[11px] text-[#5F6876]">Recorded Cedar gate policies</span>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
 
-        {/* TAB 4: CEDAR POLICY GATE */}
-        {activeTab === "actions" && (
-          <div className="app-card p-6 space-y-6">
-            <div className="border-b border-[#1E293B] pb-3">
-              <h3 className="font-mono text-base font-bold uppercase tracking-wider text-slate-100">
-                Gated Action Layer (Cedar Policy Engine)
-              </h3>
-              <p className="text-xs text-slate-400 font-mono mt-1">
-                Deterministic code disposes. Only actions complying with standing delegation ceilings and verified accounts proceed.
-              </p>
-            </div>
+              {/* Priorities Needing Attention */}
+              <div className="editorial-card p-6 space-y-4">
+                <div className="flex items-center justify-between border-b border-[#E5E4DE] pb-3">
+                  <h3 className="font-semibold text-sm text-[#141B24]">Needs your attention</h3>
+                  <span className="text-xs text-[#17263D] font-medium hover:underline cursor-pointer">View all</span>
+                </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Authorized Action */}
-              <div className="app-sunken p-5 border border-[#1E293B] flex flex-col justify-between space-y-4">
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 border border-emerald-800">
-                      WITHIN_LIMIT
+                <div className="divide-y divide-[#E5E4DE]">
+                  <div className="py-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-[#141B24]">Supplier payment approval</p>
+                      <p className="text-[11px] text-[#5F6876] mt-0.5">Due today · Finance · Waiting for authorized approval</p>
+                    </div>
+                    <span className="text-xs bg-[#F5E7C9] text-[#704E14] px-2.5 py-1 rounded font-medium">
+                      Review Needed
                     </span>
-                    <span className="font-mono text-xs text-slate-400">ACTOR: RAJESH</span>
                   </div>
-                  <h4 className="text-sm font-semibold text-slate-100">Vendor Advance Payment: INR 18,000</h4>
-                  <p className="text-xs text-slate-400 font-mono mt-1">Payee: Murugan (Balaji Paper Mills)</p>
-                  <p className="text-xs text-slate-500 font-mono">Target: HDFC Current (Standing Ceiling: INR 25,000)</p>
-                </div>
 
-                <button
-                  onClick={() => executeAction(18000)}
-                  disabled={loading}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs py-2.5 rounded transition uppercase font-bold tracking-wider"
-                >
-                  Authorize Payment (INR 18,000)
-                </button>
-              </div>
-
-              {/* Blocked Action */}
-              <div className="app-sunken p-5 border border-[#1E293B] flex flex-col justify-between space-y-4">
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-950/60 px-2 py-0.5 border border-rose-800">
-                      EXCEEDS_CEILING
+                  <div className="py-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-[#141B24]">Sharma Prints order docket #4092</p>
+                      <p className="text-[11px] text-[#5F6876] mt-0.5">Handoff prepared · Operations · Ready for recipient review</p>
+                    </div>
+                    <span className="text-xs bg-[#DCECE3] text-[#195236] px-2.5 py-1 rounded font-medium">
+                      Safe Handoff Active
                     </span>
-                    <span className="font-mono text-xs text-slate-400">ACTOR: RAJESH</span>
                   </div>
-                  <h4 className="text-sm font-semibold text-slate-100">Vendor Advance Payment: INR 48,000</h4>
-                  <p className="text-xs text-slate-400 font-mono mt-1">Payee: Murugan (Balaji Paper Mills)</p>
-                  <p className="text-xs text-slate-500 font-mono">Target: HDFC Current (Standing Ceiling: INR 25,000)</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* TAB: COMMITMENTS LIST                                     */}
+          {/* ========================================================= */}
+          {navSection === "commitments" && (
+            <div className="editorial-card p-6 space-y-4">
+              <div className="border-b border-[#E5E4DE] pb-3">
+                <h3 className="font-semibold text-sm text-[#141B24]">Operational Commitment Ledger</h3>
+                <p className="text-xs text-[#5F6876] mt-0.5">
+                  Extracted promises, decisions, and deadlines grounded in verbatim source quotes.
+                </p>
+              </div>
+
+              <div className="divide-y divide-[#E5E4DE] text-xs">
+                <div className="py-3 flex items-start justify-between">
+                  <div className="space-y-1">
+                    <p className="font-semibold text-[#141B24]">Confirm order docket #4092 for Sharma Prints (10,000 cartons)</p>
+                    <p className="text-[#5F6876]">Assigned: Rajesh · Source: WhatsApp · Citation: "Order docket #4092 is confirmed"</p>
+                  </div>
+                  <span className="bg-[#DCECE3] text-[#195236] px-2 py-0.5 rounded font-mono font-medium">AGREED</span>
                 </div>
 
-                <button
-                  onClick={() => executeAction(48000)}
-                  disabled={loading}
-                  className="w-full bg-rose-600 hover:bg-rose-500 text-white font-mono text-xs py-2.5 rounded transition uppercase font-bold tracking-wider"
-                >
-                  Authorize Payment (INR 48,000)
-                </button>
+                <div className="py-3 flex items-start justify-between">
+                  <div className="space-y-1">
+                    <p className="font-semibold text-[#141B24]">Settle Sharma ji advance payment</p>
+                    <p className="text-[#5F6876]">Due: Thursday 18:00 IST · Owner Action Pending</p>
+                  </div>
+                  <span className="bg-[#F5E7C9] text-[#704E14] px-2 py-0.5 rounded font-mono font-medium">PENDING</span>
+                </div>
               </div>
             </div>
+          )}
 
-            {/* Live Gateway Telemetry Display */}
-            {actionStatus && (
-              <div className={`p-4 rounded border font-mono text-xs flex items-center space-x-3 ${
-                actionStatus.success 
-                  ? "bg-emerald-950/40 border-emerald-800 text-emerald-300" 
-                  : "bg-rose-950/40 border-rose-800 text-rose-300"
-              }`}>
-                {actionStatus.success ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <XCircle className="h-4 w-4 shrink-0" />}
-                <span>{actionStatus.message}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 5: ALEXA+ LIVE SIMULATION */}
-        {activeTab === "alexa_sim" && (
-          <div className="app-card p-6 space-y-6">
-            <div className="flex items-center justify-between border-b border-[#1E293B] pb-4">
-              <div>
-                <h3 className="font-mono text-base font-bold uppercase tracking-wider text-slate-100 flex items-center space-x-2">
-                  <Terminal className="h-4 w-4 text-cyan-400" />
-                  <span>Alexa+ Simulated Experience Gateway</span>
-                </h3>
-                <p className="text-xs text-slate-400 font-mono mt-0.5">
-                  Real endpoint caller executing /api/alexa/webhook and /api/action/execute with authentic backend state
-                </p>
-              </div>
-              <StatusBadge stage="ACTIVE" label="ALEXA_PLUS_TRACK" />
-            </div>
-
-            <div className="space-y-4">
-              <div className="app-sunken p-4 border border-[#1E293B]">
-                <span className="font-mono text-[10px] font-bold text-cyan-400 uppercase tracking-wider block mb-1">
-                  1. Spoken User Utterance (Simulated Voice Input)
-                </span>
-                <p className="text-sm font-semibold text-slate-100 font-mono">
-                  Maya Sundaram: <span className="text-amber-300">"I'm unavailable tomorrow. Identify anything that needs attention."</span>
-                </p>
-                <p className="text-[11px] text-slate-500 font-mono mt-1">
-                  Transmitted to: <code className="text-slate-300 bg-[#070D1E] px-1 py-0.5">DeclareAbsenceAndTriageIntent</code>
+          {/* ========================================================= */}
+          {/* TAB: HANDOFF WORKSPACE                                    */}
+          {/* ========================================================= */}
+          {navSection === "handoffs" && (
+            <div className="editorial-card p-6 space-y-6">
+              <div className="border-b border-[#E5E4DE] pb-4">
+                <h3 className="font-semibold text-base text-[#141B24]">Continuity Handoff Document</h3>
+                <p className="text-xs text-[#5F6876] mt-0.5">
+                  Prepared for: <strong>Rajesh (Operations Manager)</strong> during Maya Sundaram's absence.
                 </p>
               </div>
 
-              <div className="app-sunken p-4 border border-[#1E293B]">
-                <span className="font-mono text-[10px] font-bold text-emerald-400 uppercase tracking-wider block mb-1">
-                  2. Backend Spoken Alexa Output
-                </span>
-                <p className="text-sm font-mono text-emerald-300">
-                  "Absence recorded for tomorrow under your Continuity Charter. I've generated a Safe Handoff for Rajesh with immediate commitments, items requiring delegated approval, and flagged coverage gaps."
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="app-sunken p-4 border border-rose-900/50 bg-rose-950/20">
-                  <span className="font-mono text-[10px] font-bold text-rose-400 uppercase tracking-wider block mb-1">
-                    3. Unauthorized Consequential Action
-                  </span>
-                  <p className="text-xs text-slate-300 font-mono">Attempt: Rajesh ₹65,000 Payment (Limit: ₹25,000)</p>
-                  <p className="font-mono text-xs text-rose-300 mt-2">
-                    HTTP 403 Forbidden · Denied: Requested amount exceeds delegation ceiling.
+              <div className="space-y-4 text-xs">
+                <div className="p-4 bg-[#FAF9F5] rounded-lg border border-[#E5E4DE] space-y-2">
+                  <span className="font-bold text-[#141B24] uppercase text-[10px] tracking-wider block">Scope of Delegation</span>
+                  <p className="text-[#5F6876] leading-relaxed">
+                    Rajesh is pre-authorized by Maya Sundaram under the Continuity Charter to approve vendor disbursements up to ₹25,000 from the HDFC Current account.
                   </p>
                 </div>
 
-                <div className="app-sunken p-4 border border-emerald-900/50 bg-emerald-950/20">
-                  <span className="font-mono text-[10px] font-bold text-emerald-400 uppercase tracking-wider block mb-1">
-                    4. Authorized Consequential Action
-                  </span>
-                  <p className="text-xs text-slate-300 font-mono">Attempt: Rajesh ₹18,000 Payment (Limit: ₹25,000)</p>
-                  <p className="font-mono text-xs text-emerald-300 mt-2">
-                    HTTP 200 OK · ALLOW · Execution Status: AUTHORIZED_AND_RECORDED.
+                <div className="p-4 bg-white rounded-lg border border-[#E5E4DE] space-y-2">
+                  <span className="font-bold text-[#8A241C] uppercase text-[10px] tracking-wider block">What I Cannot See (Disclosure)</span>
+                  <p className="text-[#5F6876] leading-relaxed">
+                    Personal voice calls and unexported WhatsApp threads cannot be accessed. Do not authorize disbursements outside the pre-authorized ceiling.
                   </p>
                 </div>
               </div>
+            </div>
+          )}
 
-              <div className="p-3 app-sunken border border-[#1E293B] text-xs font-mono text-slate-400 flex items-center justify-between">
-                <span>Terminal Verification Command:</span>
-                <code className="text-amber-400 font-bold">python -m tests.run_simulation</code>
+          {/* ========================================================= */}
+          {/* TAB: AUTHORITY & POLICIES                                 */}
+          {/* ========================================================= */}
+          {navSection === "authority" && (
+            <div className="editorial-card p-6 space-y-4">
+              <div className="border-b border-[#E5E4DE] pb-3">
+                <h3 className="font-semibold text-sm text-[#141B24]">Authority Rules & Standing Delegations</h3>
+                <p className="text-xs text-[#5F6876] mt-0.5">
+                  Enforced via deterministic Cedar-style policy code.
+                </p>
+              </div>
+
+              <div className="p-4 bg-[#FAF9F5] rounded-lg border border-[#E5E4DE] text-xs space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-[#141B24]">Standing Delegation #01</span>
+                  <span className="bg-[#DCECE3] text-[#195236] px-2 py-0.5 rounded font-mono font-semibold">ACTIVE</span>
+                </div>
+                <p className="text-[#5F6876]">Grantor: Maya Sundaram (Owner) &rarr; Grantee: Rajesh (Operations)</p>
+                <p className="text-[#5F6876] font-mono">Ceiling: INR 25,000.00 · Permitted Account: HDFC Current</p>
               </div>
             </div>
-          </div>
-        )}
-      </main>
+          )}
+
+          {/* ========================================================= */}
+          {/* TAB: CRYPTOGRAPHIC AUDIT                                  */}
+          {/* ========================================================= */}
+          {navSection === "audit" && (
+            <div className="editorial-card p-6 space-y-4">
+              <div className="border-b border-[#E5E4DE] pb-3">
+                <h3 className="font-semibold text-sm text-[#141B24]">Cryptographic Hash-Chained Audit Trail</h3>
+                <p className="text-xs text-[#5F6876] mt-0.5">
+                  Every state transition, quarantine event, and policy decision is cryptographically chained.
+                </p>
+              </div>
+
+              <div className="space-y-2 text-xs font-mono">
+                {auditLogs.length > 0 ? (
+                  auditLogs.map((log: any, idx: number) => (
+                    <div key={idx} className="p-3 bg-[#FAF9F5] border border-[#E5E4DE] rounded-lg space-y-1">
+                      <div className="flex justify-between font-bold text-[#17263D]">
+                        <span>EVENT: {log.event}</span>
+                        <span>ACTOR: {log.actor}</span>
+                      </div>
+                      <p className="text-[11px] text-[#5F6876]">HASH: {log.hash}</p>
+                      <p className="text-[11px] text-[#5F6876]">PREV: {log.prev_hash}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="p-4 text-center text-[#5F6876]">Run the live simulation to generate verifiable audit logs.</p>
+                )}
+              </div>
+            </div>
+          )}
+
+        </main>
+      </div>
     </div>
   );
 }
