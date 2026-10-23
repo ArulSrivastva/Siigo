@@ -108,14 +108,11 @@ def run_alexa_simulation():
     print(f"    Alexa Output: \"{alexa_response}\"")
 
     # Step 5: Safe Handoff State Inspection
-    r_handoff = client.get("/api/handoff/latest_active?recipient_id=Rajesh")
-    if r_handoff.status_code != 200:
-        # Fetch from active absence in db
-        db_read = SessionLocal()
-        latest_abs = db_read.query(AbsenceEvent).order_by(AbsenceEvent.started_at.desc()).first()
-        r_handoff = client.get(f"/api/handoff/{latest_abs.id}?recipient_id=Rajesh")
-        db_read.close()
-
+    r_handoff = client.get(
+        "/api/handoff/latest_active?recipient_id=Rajesh",
+        headers={"Authorization": f"Bearer {DEMO_TOKENS['staff']}"}
+    )
+    assert r_handoff.status_code == 200, f"Safe Handoff failed: {r_handoff.status_code}"
     handoff_doc = r_handoff.json()
     print(f"\n[5. SAFE HANDOFF COMPILATION (GRANT SCOPED)]")
     print(f"    Absent Principal: {handoff_doc['absent_person']}")
@@ -169,7 +166,10 @@ def run_alexa_simulation():
     assert r_auth.status_code == 200, "Error: Permitted action was rejected!"
 
     # Step 8: Cryptographic Audit Trail Verification
-    r_audit = client.get("/api/audit/logs")
+    r_audit = client.get(
+        "/api/audit/logs",
+        headers={"Authorization": f"Bearer {DEMO_TOKENS['owner']}"}
+    )
     logs = r_audit.json()
     print(f"\n[8. CRYPTOGRAPHIC AUDIT LOG]")
     print(f"    Total Events Hash-Chained: {len(logs)}")
