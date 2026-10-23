@@ -1,8 +1,8 @@
 """
 Siigo Model Context Protocol (MCP) Server
-Specification Version: 2025-11-25 (Streamable HTTP / SSE transport compliant)
+Specification: Streamable HTTP / JSON-RPC 2.0 (Spec 2024-11-05 / 2025-11-25 compatible)
 
-Exposes Siigo continuity and authority governance tools to LLM agents and Alexa+:
+Exposes Siigo continuity and authority governance tools to LLM agents and assistant gateways:
 1. siigo_get_continuity_health: Retrieves readiness score, bus factor, and single points of failure.
 2. siigo_compile_handoff: Generates grant-scoped safe handoff with verbatim citations and gaps.
 3. siigo_verify_evidence_span: Verifies exact substring quote against source text to prevent hallucinations.
@@ -13,7 +13,7 @@ import uuid
 import datetime
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Request, Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -22,10 +22,11 @@ from backend.models import AbsenceEvent, DelegationGrant
 from backend.analyzers import analyze_continuity_health
 from backend.handoff_compiler import compile_safe_handoff
 from backend.policy_engine import evaluate_action_policy
+from backend.auth import get_current_actor, AuthenticatedActor
 from tests.gold_dataset.verifier import verify_span, VerificationError
 from tests.gold_dataset.schema import EvidenceSpan
 
-mcp_router = APIRouter(prefix="/mcp", tags=["Model Context Protocol (2025-11-25)"])
+mcp_router = APIRouter(prefix="/mcp", tags=["Model Context Protocol (Streamable HTTP)"])
 
 # Standard MCP Tool Definitions
 MCP_TOOLS = [
@@ -89,33 +90,53 @@ class JSONRPCRequest(BaseModel):
     method: str
     params: Optional[Dict[str, Any]] = None
 
-@mcp_router.get("/tools")
-def list_mcp_tools():
-    """Lists MCP tools compliant with MCP spec 2025-11-25."""
-    return {
-        "mcp_version": "2025-11-25",
-        "protocol": "streamable_http",
-        "tools": MCP_TOOLS
-    }
-
-from backend.auth import get_current_actor, AuthenticatedActor
-
-@mcp_router.post("/execute")
-def execute_mcp_tool(
+def dispatch_mcp_jsonrpc(
     req: JSONRPCRequest, 
-    actor: AuthenticatedActor = Depends(get_current_actor),
-    db: Session = Depends(get_db)
-):
+    actor: AuthenticatedActor,
+    db: Session
+) -> Dict[str, Any]:
     """
-    Executes an MCP tool call over standard JSON-RPC 2.0 / Streamable HTTP.
-    Scoped strictly to the authenticated actor's tenant_id (ignoring client-supplied tenant_id).
+    Central JSON-RPC 2.0 dispatcher for Streamable HTTP MCP transport.
+    Strictly tenant-scoped to actor.tenant_id.
     """
     method = req.method
     params = req.params or {}
-
-    # Strict tenant scoping: derive tenant_id exclusively from authenticated actor context
     tenant_id = actor.tenant_id
 
+    # 1. MCP Protocol Handshake: initialize
+    if method == "initialize":
+        return {
+            "jsonrpc": "2.0",
+            "id": req.id,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {
+                    "tools": {"listChanged": False}
+                },
+                "serverInfo": {
+                    "name": "siigo-governance-mcp",
+                    "version": "1.0.0"
+                }
+            }
+        }
+
+    # 2. MCP Initialized Notification
+    if method in ("notifications/initialized", "initialized"):
+        return {
+            "jsonrpc": "2.0",
+            "id": req.id,
+            "result": {}
+        }
+
+    # 3. Ping
+    if method == "ping":
+        return {
+            "jsonrpc": "2.0",
+            "id": req.id,
+            "result": {}
+        }
+
+    # 4. Tool Discovery
     if method == "tools/list":
         return {
             "jsonrpc": "2.0",
@@ -123,6 +144,7 @@ def execute_mcp_tool(
             "result": {"tools": MCP_TOOLS}
         }
 
+    # 5. Tool Execution
     if method == "tools/call":
         tool_name = params.get("name")
         args = params.get("arguments", {})
@@ -182,10 +204,16 @@ def execute_mcp_tool(
             on_behalf_of = args.get("on_behalf_of")
             action_params = {
                 "amount_inr": args.get("amount_inr"),
-                "account": args.get("account", "HDFC Current")
+                "account": args.get("account")
             }
             allowed, reason = evaluate_action_policy(
-                db, tenant_id, action_type, actor_id, on_behalf_of, action_params
+                db=db,
+                tenant_id=tenant_id,
+                action_type=action_type,
+                actor_id=actor_id,
+                on_behalf_of=on_behalf_of,
+                params=action_params,
+                authenticated_actor_tier=actor.trust_tier.value
             )
             return {
                 "jsonrpc": "2.0",
@@ -208,4 +236,44 @@ def execute_mcp_tool(
         "jsonrpc": "2.0",
         "id": req.id,
         "error": {"code": -32600, "message": f"Unsupported JSON-RPC method '{method}'."}
+    }
+
+# Standard Streamable HTTP MCP Endpoint
+@mcp_router.post("")
+@mcp_router.post("/")
+def handle_mcp_streamable_http(
+    req: JSONRPCRequest,
+    actor: AuthenticatedActor = Depends(get_current_actor),
+    db: Session = Depends(get_db)
+):
+    """Primary standard MCP Streamable HTTP endpoint accepting JSON-RPC 2.0 payloads."""
+    return dispatch_mcp_jsonrpc(req, actor, db)
+
+@mcp_router.get("")
+@mcp_router.get("/")
+def get_mcp_discovery():
+    """Streamable HTTP discovery metadata."""
+    return {
+        "name": "siigo-governance-mcp",
+        "protocol": "streamable_http",
+        "version": "1.0.0",
+        "supported_methods": ["initialize", "ping", "tools/list", "tools/call"],
+        "tools_count": len(MCP_TOOLS)
+    }
+
+# Backwards compatible alias endpoints
+@mcp_router.post("/execute")
+def execute_mcp_tool_alias(
+    req: JSONRPCRequest, 
+    actor: AuthenticatedActor = Depends(get_current_actor),
+    db: Session = Depends(get_db)
+):
+    return dispatch_mcp_jsonrpc(req, actor, db)
+
+@mcp_router.get("/tools")
+def list_mcp_tools_alias():
+    return {
+        "mcp_version": "2025-11-25",
+        "protocol": "streamable_http",
+        "tools": MCP_TOOLS
     }
