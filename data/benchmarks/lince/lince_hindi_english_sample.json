@@ -1,0 +1,92 @@
+[
+  {
+    "tokens": [
+      "Sharma",
+      "ji",
+      "ka",
+      "advance",
+      "Thursday",
+      "tak",
+      "settle",
+      "hoga"
+    ],
+    "lid": [
+      "NE",
+      "HIN",
+      "HIN",
+      "ENG",
+      "ENG",
+      "HIN",
+      "ENG",
+      "HIN"
+    ],
+    "pos": [
+      "NNP",
+      "PSP",
+      "PSP",
+      "NN",
+      "NNP",
+      "PSP",
+      "VB",
+      "VAUX"
+    ]
+  },
+  {
+    "tokens": [
+      "Kal",
+      "morning",
+      "paper",
+      "stock",
+      "dispatch",
+      "kar",
+      "dena"
+    ],
+    "lid": [
+      "HIN",
+      "ENG",
+      "ENG",
+      "ENG",
+      "ENG",
+      "HIN",
+      "HIN"
+    ],
+    "pos": [
+      "NN",
+      "NN",
+      "NN",
+      "NN",
+      "VB",
+      "VAUX",
+      "VAUX"
+    ]
+  },
+  {
+    "tokens": [
+      "Bhai",
+      "50000",
+      "INR",
+      "transfer",
+      "ho",
+      "gaya",
+      "hai"
+    ],
+    "lid": [
+      "HIN",
+      "NUM",
+      "ENG",
+      "ENG",
+      "HIN",
+      "HIN",
+      "HIN"
+    ],
+    "pos": [
+      "NN",
+      "QC",
+      "NNP",
+      "NN",
+      "VM",
+      "VAUX",
+      "VAUX"
+    ]
+  }
+]

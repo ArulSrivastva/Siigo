@@ -1,0 +1,24 @@
+{
+  "dataset_name": "ai4bharat/IndicVoices",
+  "license": "CC BY 4.0",
+  "languages_targeted": [
+    "Tamil (ta)",
+    "Hindi (hi)",
+    "Indian English (en-IN)"
+  ],
+  "purpose": "ASR and Voice Note WER Benchmark",
+  "sample_manifest": [
+    {
+      "speaker_id": "IV_TA_001",
+      "lang": "ta",
+      "topic": "business_transaction",
+      "text": "ஆர்டர் டாக்கெட் நாலாயிரத்து தொண்ணூற்று இரண்டு உறுதி செய்யப்பட்டது"
+    },
+    {
+      "speaker_id": "IV_HI_002",
+      "lang": "hi",
+      "topic": "payment_advance",
+      "text": "शर्मा जी का एडवांस गुरुवार तक सेटल हो जाएगा"
+    }
+  ]
+}
