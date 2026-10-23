@@ -346,6 +346,14 @@ def declare_absence(req: DeclareAbsenceRequest, db: Session = Depends(get_db)):
 
     return {"status": "absence_active", "absence_id": absence.id, "expires_at": expires_at.isoformat()}
 
+@app.get("/api/handoff/latest_active")
+def get_latest_active_handoff(recipient_id: str = "Rajesh", tenant_id: str = "default_tenant", db: Session = Depends(get_db)):
+    """Compiles a verified Safe Handoff for the latest active absence event."""
+    try:
+        return compile_safe_handoff(db, tenant_id, "latest_active", recipient_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.get("/api/handoff/{absence_id}")
 def generate_handoff(absence_id: str, recipient_id: str = "Rajesh", tenant_id: str = "default_tenant", db: Session = Depends(get_db)):
     """Compiles a verified Safe Handoff with citations and 'What I cannot see' section."""

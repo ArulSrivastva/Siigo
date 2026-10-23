@@ -19,13 +19,23 @@ def compile_safe_handoff(
     """
     Assembles a scoped, evidence-cited handoff for a recipient covering an absent person.
     """
-    absence = db.query(AbsenceEvent).filter(
-        AbsenceEvent.id == absence_id,
-        AbsenceEvent.tenant_id == tenant_id
-    ).first()
+    if absence_id == "latest_active":
+        absence = db.query(AbsenceEvent).filter(
+            AbsenceEvent.tenant_id == tenant_id,
+            AbsenceEvent.status == "active"
+        ).order_by(AbsenceEvent.started_at.desc()).first()
+        if not absence:
+            absence = db.query(AbsenceEvent).filter(
+                AbsenceEvent.tenant_id == tenant_id
+            ).order_by(AbsenceEvent.started_at.desc()).first()
+    else:
+        absence = db.query(AbsenceEvent).filter(
+            AbsenceEvent.id == absence_id,
+            AbsenceEvent.tenant_id == tenant_id
+        ).first()
 
     if not absence:
-        raise ValueError(f"Absence {absence_id} not found.")
+        raise ValueError(f"Absence '{absence_id}' not found.")
 
     absent_owner = absence.person_id
 
