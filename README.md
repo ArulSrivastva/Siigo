@@ -4,9 +4,13 @@ A governed commitment and authority ledger with an emergency Safe Handoff mode f
 
 ## Overview
 
-Siigo provides an operational continuity layer for owner-dependent businesses where critical commitments, authority limits, and decisions reside in chat channels and unwritten conversations. Siigo captures operational promises, grounds every claim in verbatim source evidence, enforces authority limits through policy-as-code, and compiles a citation-backed Safe Handoff when a key person is unavailable.
+The biggest problem small businesses face is that critical information depends on one person. When that person becomes unavailable, important commitments get lost in chat threads, operational context disappears, and team members are left confused about what to do and what they are allowed to do.
 
-## Architectural Principle
+Siigo is a business continuity system that captures operational commitments from business conversations, verifies them against their original evidence, and compiles actionable handoffs for the next person. It also enforces deterministic authority limits, preventing unauthorized decisions and financial breaches when leaders step away.
+
+With Siigo, even when a key person is unavailable, the business keeps moving safely.
+
+## Core Architectural Principle
 
 The LLM proposes; deterministic code disposes.
 
@@ -15,25 +19,25 @@ Language models extract candidate commitments and draft natural-language briefin
 ## Key Subsystems
 
 1. Evidence Store
-An append-only, content-hashed repository storing raw chat exports, emails, and voice notes. Each record is stamped with a cryptographic SHA-256 hash and assigned an authenticated trust tier.
+An append-only, content-hashed repository storing raw chat exports, emails, and voice notes. Each record is stamped with a SHA-256 hash and assigned an authenticated trust tier.
 
 2. Deterministic Span Verifier
 Validates that every claim extracted by an LLM contains a verbatim substring matching the source document at exact character offsets. Fabricated quotes, hallucinated approvals, and drifted boundaries are rejected with HTTP 422.
 
-3. Cryptographic Authentication & Trust Boundary
+3. Cryptographic Authentication and Trust Boundary
 Actor identity is governed by HMAC-SHA256 signed session tokens. Request headers cannot escalate privileges:
 - Tier 0: Verified Owner
 - Tier 1: Staff Contributor
 - Tier 2: External Client or Vendor
 - Tier 3: Untrusted External Source
 
-Unauthenticated requests strictly default to unprivileged Tier 2 (EXTERNAL), never Owner. Tokens enforce cryptographic HMAC signatures, expiration timestamps (exp), issued-at timestamps (iat), and issuer verification (iss). External and untrusted tiers cannot declare absence, establish approval rules, define decisions, or execute out-of-channel approvals.
+Unauthenticated requests strictly default to unprivileged Tier 2 (EXTERNAL), never Owner. Tokens enforce HMAC signatures, expiration timestamps (exp), issued-at timestamps (iat), and issuer verification (iss). External and untrusted tiers cannot declare absence, establish approval rules, define decisions, or execute out-of-channel approvals.
 
 4. Authority Policy Engine
 A deterministic policy layer enforcing pre-authorized standing delegations and monetary ceilings. Payments exceeding delegation limits, omitting mandatory accounts on restricted grants, or specifying non-finite or negative amounts fail closed and return HTTP 403.
 
 5. Safe Handoff Compiler
-Compiles an evidence-cited operational briefing during an absence. Claims are filtered by recipient grants and divided into Act Now, Needs Approval, and Can Wait. Every handoff includes an explicit What I Cannot See transparency section identifying unmonitored channels and operational gaps.
+Compiles an evidence-cited operational briefing during an absence. Claims are filtered by recipient grants and divided into Act Now, Needs Approval, and Can Wait. Every handoff includes an explicit "What I Cannot See" transparency section identifying unmonitored channels and operational gaps.
 
 6. Hash-Chained Audit Trail
 Every state transition, quarantine event, and policy execution is linked through an immutable SHA-256 hash chain.
@@ -42,7 +46,7 @@ Every state transition, quarantine event, and policy execution is linked through
 
 Siigo implements an MCP server prototype conforming to JSON-RPC 2.0 over Streamable HTTP transport under the `/mcp` endpoint:
 - Protocol Handshake: `initialize` method returning protocol version, server capabilities, and server info.
-- Protocol Notifications & Health: `notifications/initialized` and `ping`.
+- Protocol Notifications and Health: `notifications/initialized` and `ping`.
 - Tool Discovery: `tools/list` returning the registered Siigo governance tools.
 - Tool Call Execution: `tools/call` executing requested tools within the caller's authenticated tenant context.
 
@@ -87,6 +91,23 @@ python -m tests.run_simulation
 
 3. Interactive Browser Demo:
 Start the application and navigate to http://localhost:3000 -> "Alexa+ Live Simulation".
+
+## Live Demo Video & Synchronized Voiceover
+
+Siigo includes a complete, synchronized 1080p demonstration recording and voiceover:
+- Interactive Player: `recordings/watch_demo.html` (synchronizes 1080p video with teleprompter cue cards and audio narration).
+- High-Fidelity Video: `recordings/siigo_3min_demo_walkthrough.webm` (1080p recording with visible pointer cursor and click pulses).
+- Master Voiceover Track: `voiceover/synced_video_master_voiceover.wav` (160.0s master track synchronized to every visual scene transition).
+
+### Video Scene Breakdown:
+- Scene 0 (0:00 - 0:48): Intro Pitch & Continuity Overview (Business Continuity Score & Fragility Metrics)
+- Scene 1 (0:48 - 1:04): Business Setup & Maya's Absence Instruction
+- Scene 2 (1:04 - 1:21): Walkthrough Pipeline Execution & Alexa Output
+- Scene 3 (1:21 - 1:37): Evidence Grounding & Sharma Prints Order Docket Citation
+- Scene 4 (1:37 - 1:55): Authority Gate Denial (INR 65,000 Payment Blocked)
+- Scene 5 (1:55 - 2:13): Permitted Action Authorization (INR 18,000 Payment Allowed)
+- Scene 6 (2:13 - 2:29): Human Oversight Queue (Proposed -> Verified -> Confirmed Lifecycle)
+- Scene 7 (2:29 - 2:40): Closing Continuity Guarantee
 
 ## Evaluation Benchmark & Security Results
 
@@ -147,11 +168,20 @@ python -m tests.test_e2e_demo
   - Industrial Telemetry and Editorial command center built with Next.js, React, Tailwind CSS, and Lucide icons.
   - Three-column Alexa+ Live Simulation showcase with active actor session switcher and fail-closed state derivation.
 
+- recordings/
+  - watch_demo.html: Synchronized browser player with teleprompter cue cards and dual audio-video playback
+  - siigo_3min_demo_walkthrough.webm: 1080p screen recording with animated beacon cursor
+
+- voiceover/
+  - synced_video_master_voiceover.wav: 160.0s master voiceover narration track
+  - Individual scene WAV clips (00 through 07)
+
 - tests/
   - run_simulation.py: Full 8-step Alexa+ simulated experience script
   - test_mcp_server.py: MCP protocol tests (initialize, tools/list, tools/call, error codes)
   - test_e2e_demo.py: Full end-to-end integration and security verification
   - test_adversarial_suite.py: 10-scenario adversarial attack test suite with fail-closed assertions
+  - test_security_regressions.py: Suite verifying HMAC token boundary and authenticated scoping
   - test_whatsapp_extraction.py: Verification of real WhatsApp export parsing
   - eval_rigorous_scoreboard.py: Precision, recall, and per-trap evaluation harness
   - gold_dataset/
