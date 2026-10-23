@@ -98,14 +98,23 @@ def list_mcp_tools():
         "tools": MCP_TOOLS
     }
 
+from backend.auth import get_current_actor, AuthenticatedActor
+
 @mcp_router.post("/execute")
-def execute_mcp_tool(req: JSONRPCRequest, db: Session = Depends(get_db)):
+def execute_mcp_tool(
+    req: JSONRPCRequest, 
+    actor: AuthenticatedActor = Depends(get_current_actor),
+    db: Session = Depends(get_db)
+):
     """
     Executes an MCP tool call over standard JSON-RPC 2.0 / Streamable HTTP.
-    Calls actual application logic without mocks.
+    Scoped strictly to the authenticated actor's tenant_id (ignoring client-supplied tenant_id).
     """
     method = req.method
     params = req.params or {}
+
+    # Strict tenant scoping: derive tenant_id exclusively from authenticated actor context
+    tenant_id = actor.tenant_id
 
     if method == "tools/list":
         return {
@@ -119,7 +128,6 @@ def execute_mcp_tool(req: JSONRPCRequest, db: Session = Depends(get_db)):
         args = params.get("arguments", {})
 
         if tool_name == "siigo_get_continuity_health":
-            tenant_id = args.get("tenant_id", "default_tenant")
             health = analyze_continuity_health(db, tenant_id)
             return {
                 "jsonrpc": "2.0",
@@ -128,7 +136,6 @@ def execute_mcp_tool(req: JSONRPCRequest, db: Session = Depends(get_db)):
             }
 
         elif tool_name == "siigo_compile_handoff":
-            tenant_id = args.get("tenant_id", "default_tenant")
             recipient = args.get("recipient_id", "Rajesh")
             latest_abs = db.query(AbsenceEvent).filter(
                 AbsenceEvent.tenant_id == tenant_id,
@@ -170,7 +177,6 @@ def execute_mcp_tool(req: JSONRPCRequest, db: Session = Depends(get_db)):
                 }
 
         elif tool_name == "siigo_evaluate_gated_action":
-            tenant_id = args.get("tenant_id", "default_tenant")
             action_type = args.get("action_type")
             actor_id = args.get("actor_id")
             on_behalf_of = args.get("on_behalf_of")
