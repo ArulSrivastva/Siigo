@@ -463,6 +463,52 @@ def continuity_health(
     """Returns the Bus-Factor Report and Readiness Score for actor's tenant."""
     return analyze_continuity_health(db, actor.tenant_id)
 
+@app.post("/api/demo/reset")
+def reset_demo_database(
+    actor: AuthenticatedActor = Depends(require_owner),
+    db: Session = Depends(get_db)
+):
+    """
+    Resets the demo tenant database to a pristine, predictable starting state:
+    - Clears test claims, citations, evidence, absence events, and action requests
+    - Re-establishes Maya's Charter and Rajesh's Standing Delegation (INR 25,000 on HDFC Current)
+    - Appends a clean DEMO_ENVIRONMENT_RESET audit event
+    """
+    db.query(ClaimEvidence).delete()
+    db.query(Claim).delete()
+    db.query(Evidence).delete()
+    db.query(AbsenceEvent).delete()
+    db.query(ActionRequest).delete()
+    db.query(DelegationGrant).delete()
+    db.query(Charter).delete()
+
+    grant = DelegationGrant(
+        tenant_id=actor.tenant_id,
+        grantor="Maya Sundaram",
+        grantee="Rajesh",
+        scope={"account": "HDFC Current", "max_amount_inr": 25000.0},
+        allowed_actions=["approve_vendor_payment", "dispatch_shipment"],
+        activation="on_handoff"
+    )
+    db.add(grant)
+    db.commit()
+
+    append_audit_event(db, actor.tenant_id, actor.display_name, "DEMO_ENVIRONMENT_RESET", {
+        "grantee": "Rajesh",
+        "ceiling_inr": 25000.0,
+        "account": "HDFC Current"
+    })
+
+    return {
+        "status": "reset_complete",
+        "tenant_id": actor.tenant_id,
+        "active_grant": {
+            "grantee": "Rajesh",
+            "ceiling_inr": 25000.0,
+            "account": "HDFC Current"
+        }
+    }
+
 @app.post("/api/absence/declare")
 def declare_absence(
     req: DeclareAbsenceRequest, 

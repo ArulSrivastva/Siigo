@@ -404,12 +404,39 @@ export default function Home() {
     }
   };
 
+  // Reset Simulation and Restore Pristine Demo Baseline
+  const resetSimulation = async () => {
+    setLoading(true);
+    try {
+      await fetch(`${API_BASE}/api/demo/reset`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${tokens.owner}` }
+      });
+    } catch {
+      // Offline fallback
+    }
+    setSimStep(1);
+    setAlexaResponse(null);
+    setExtractedEvidence(null);
+    setHandoffDoc(null);
+    setActionOutcome(null);
+    setApiError(null);
+    setIsAbsent(false);
+    await loadData();
+    setLoading(false);
+  };
+
   // Run Complete Autonomous Demo Walkthrough
   const runLiveSimulation = async () => {
     setLoading(true);
     setApiError(null);
-    setSimStep(1);
     try {
+      // Ensure pristine database baseline before executing demo
+      await fetch(`${API_BASE}/api/demo/reset`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${tokens.owner}` }
+      });
+      setSimStep(1);
       const evId = await stepIngestEvidence();
       if (!evId) return;
       await stepVerifySpan(evId);
@@ -421,15 +448,6 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const resetSimulation = () => {
-    setSimStep(1);
-    setAlexaResponse(null);
-    setExtractedEvidence(null);
-    setHandoffDoc(null);
-    setActionOutcome(null);
-    setApiError(null);
   };
 
   return (
