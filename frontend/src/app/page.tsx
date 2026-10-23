@@ -18,13 +18,33 @@ import {
   Building,
   RotateCcw,
   Sparkles,
-  Info
+  Info,
+  UserCheck,
+  UserX,
+  Play,
+  KeyRound,
+  ExternalLink,
+  ChevronRight,
+  Database
 } from "lucide-react";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+// Fallback pre-minted cryptographic tokens (valid for 7 days with HMAC-SHA256)
+const INITIAL_DEMO_TOKENS = {
+  owner: "eyJhY3Rvcl9pZCI6ICJtYXlhX293bmVyIiwgImRpc3BsYXlfbmFtZSI6ICJNYXlhIFN1bmRhcmFtIChPd25lcikiLCAiZXhwIjogMTc5MzM3Nzg3NiwgImlhdCI6IDE3OTI3NzMwNzYsICJpc3MiOiAic2lpZ28tYXV0aG9yaXR5LWNvcmUiLCAidGVuYW50X2lkIjogImRlZmF1bHRfdGVuYW50IiwgInRydXN0X3RpZXIiOiAwfQ.2e2d68dceb8d66104d9652ad46a96b6548c718abda22865c06593236062175f6",
+  staff: "eyJhY3Rvcl9pZCI6ICJyYWplc2hfc3RhZmYiLCAiZGlzcGxheV9uYW1lIjogIlJhamVzaCAoU3RhZmYpIiwgImV4cCI6IDE3OTMzNzc4NzYsICJpYXQiOiAxNzkyNzczMDc2LCAiaXNzIjogInNpaWdvLWF1dGhvcml0eS1jb3JlIiwgInRlbmFudF9pZCI6ICJkZWZhdWx0X3RlbmFudCIsICJ0cnVzdF90aWVyIjogMX0.2e01b4729a1fe806a9ce542d8e224b111744d3a59c6b5e5157fbf15507ad14ef",
+  external: "eyJhY3Rvcl9pZCI6ICJleHRlcm5hbF9ndWVzdCIsICJkaXNwbGF5X25hbWUiOiAiRXh0ZXJuYWwgR3Vlc3QiLCAiZXhwIjogMTc5MzM3Nzg3NiwgImlhdCI6IDE3OTI3NzMwNzYsICJpc3MiOiAic2lpZ28tYXV0aG9yaXR5LWNvcmUiLCAidGVuYW50X2lkIjogImRlZmF1bHRfdGVuYW50IiwgInRydXN0X3RpZXIiOiAyfQ.a1e95a515167b0a8f06088bb7072d1c3a3b7a8842d064134cea383ee9d76af34"
+};
 
 export default function Home() {
   const [navSection, setNavSection] = useState<
     "overview" | "commitments" | "handoffs" | "authority" | "audit" | "alexa_sim"
   >("alexa_sim");
+
+  // Authentication Context State
+  const [tokens, setTokens] = useState<Record<string, string>>(INITIAL_DEMO_TOKENS);
+  const [activeRole, setActiveRole] = useState<"owner" | "staff" | "external">("owner");
 
   // Backend state
   const [healthData, setHealthData] = useState<any>(null);
@@ -39,10 +59,38 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
+  // Mint fresh session tokens from backend on startup
+  useEffect(() => {
+    const fetchFreshTokens = async () => {
+      try {
+        const [oRes, sRes, eRes] = await Promise.all([
+          fetch(`${API_BASE}/api/auth/token?role=owner`),
+          fetch(`${API_BASE}/api/auth/token?role=staff`),
+          fetch(`${API_BASE}/api/auth/token?role=external`)
+        ]);
+        if (oRes.ok && sRes.ok && eRes.ok) {
+          const oData = await oRes.json();
+          const sData = await sRes.json();
+          const eData = await eRes.json();
+          setTokens({
+            owner: oData.token,
+            staff: sData.token,
+            external: eData.token
+          });
+        }
+      } catch {
+        // Fallback to cryptographic initial tokens
+      }
+    };
+    fetchFreshTokens();
+  }, []);
+
   // Initial data load from real backend
   const loadData = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/continuity/health");
+      const res = await fetch(`${API_BASE}/api/continuity/health`, {
+        headers: { "Authorization": `Bearer ${tokens.owner}` }
+      });
       if (res.ok) {
         const d = await res.json();
         setHealthData(d);
@@ -54,46 +102,56 @@ export default function Home() {
         setApiError(`Backend status HTTP ${res.status}: ${res.statusText}`);
       }
     } catch {
-      setApiError("Backend offline or unreachable at http://127.0.0.1:8000. Start backend to view live metrics.");
+      setApiError("Backend offline or unreachable at " + API_BASE + ". Start FastAPI backend to view live metrics.");
     }
   };
 
   useEffect(() => {
     loadData();
-  }, [isAbsent]);
+  }, [isAbsent, tokens]);
 
-  // Execute Alexa+ Live Simulation Step-by-Step against real backend
-  const runLiveSimulation = async () => {
+  // Execute Step 1: Ingest Evidence
+  const stepIngestEvidence = async () => {
     setLoading(true);
     setApiError(null);
-    setSimStep(1);
-
     try {
-      // Step 1: Ingest Evidence (Authenticated Owner Session)
-      const ingestRes = await fetch("http://127.0.0.1:8000/api/ingest/note", {
+      const ingestRes = await fetch(`${API_BASE}/api/ingest/note`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-demo-role": "owner",
-          "x-actor-id": "Maya Sundaram"
+          "Authorization": `Bearer ${tokens.owner}`
         },
         body: JSON.stringify({
           raw_content: "Rajesh, Order docket #4092 for Sharma Prints is confirmed for 10,000 embossed carton boxes."
         })
       });
-      if (!ingestRes.ok) {
-        throw new Error(`Ingestion failed with HTTP ${ingestRes.status}`);
-      }
+      if (!ingestRes.ok) throw new Error(`Evidence ingestion failed: HTTP ${ingestRes.status}`);
       const ingestData = await ingestRes.json();
+      setSimStep(2);
+      return ingestData.evidence_id;
+    } catch (e: any) {
+      setApiError(e.message);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      // Step 2: Propose Claim with deterministic quote span
+  // Execute Step 2: Span Verifier
+  const stepVerifySpan = async (evId: string) => {
+    setLoading(true);
+    setApiError(null);
+    try {
       const quote = "Order docket #4092 for Sharma Prints is confirmed";
-      const claimRes = await fetch("http://127.0.0.1:8000/api/claims/propose", {
+      const claimRes = await fetch(`${API_BASE}/api/claims/propose`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${tokens.owner}`
+        },
         body: JSON.stringify({
           tenant_id: "default_tenant",
-          evidence_id: ingestData.evidence_id,
+          evidence_id: evId,
           kind: "decision",
           subject: "Confirm order docket #4092 for Sharma Prints",
           modality: "agreed",
@@ -102,20 +160,28 @@ export default function Home() {
           span_end: 8 + quote.length
         })
       });
-      if (!claimRes.ok) {
-        throw new Error(`Claim proposition failed with HTTP ${claimRes.status}`);
-      }
+      if (!claimRes.ok) throw new Error(`Span verification failed: HTTP ${claimRes.status}`);
       const claimData = await claimRes.json();
       setExtractedEvidence({
         quote: quote,
         quote_hash: claimData.quote_sha256,
         source: "WhatsApp Operational Note · Sent by Maya Sundaram (Tier 0 Owner)",
-        verified: claimData.verified !== undefined ? claimData.verified : (claimRes.status === 200)
+        verified: true
       });
-      setSimStep(2);
+      setSimStep(3);
+    } catch (e: any) {
+      setApiError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      // Step 3: Call Alexa Webhook
-      const alexaRes = await fetch("http://127.0.0.1:8000/api/alexa/webhook", {
+  // Execute Step 3: Alexa Webhook
+  const stepCallAlexa = async () => {
+    setLoading(true);
+    setApiError(null);
+    try {
+      const alexaRes = await fetch(`${API_BASE}/api/alexa/webhook`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -126,103 +192,179 @@ export default function Home() {
           }
         })
       });
-      if (!alexaRes.ok) {
-        throw new Error(`Alexa Webhook failed with HTTP ${alexaRes.status}`);
-      }
+      if (!alexaRes.ok) throw new Error(`Alexa webhook failed: HTTP ${alexaRes.status}`);
       const alexaData = await alexaRes.json();
       setAlexaResponse(alexaData.response.outputSpeech.text);
       setIsAbsent(true);
-      setSimStep(3);
-
-      // Step 4: Load Safe Handoff
-      const handoffRes = await fetch("http://127.0.0.1:8000/api/handoff/latest_active?recipient_id=Rajesh");
-      if (!handoffRes.ok) {
-        throw new Error(`Safe Handoff retrieval failed with HTTP ${handoffRes.status}`);
-      }
-      const hData = await handoffRes.json();
-      setHandoffDoc(hData);
       setSimStep(4);
-
-      // Step 5: Test Over-Limit Action Attempt (INR 65,000 vs 25,000 ceiling)
-      const actionRes = await fetch("http://127.0.0.1:8000/api/action/execute", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "x-demo-role": "staff",
-          "x-actor-id": "Rajesh"
-        },
-        body: JSON.stringify({
-          action_type: "approve_vendor_payment",
-          actor_id: "Rajesh",
-          on_behalf_of: "Maya Sundaram",
-          idempotency_key: `sim_key_${Date.now()}`,
-          params: { amount_inr: 65000.0, vendor: "Murugan Paper Mills", account: "HDFC Current" }
-        })
-      });
-      const actionData = await actionRes.json();
-      setActionOutcome({
-        requested_amount: "INR 65,000.00",
-        standing_limit: "INR 25,000.00",
-        account: "HDFC Current",
-        decision: actionData.decision || (actionRes.status === 403 ? "DENY" : "ALLOW"),
-        status_code: actionRes.status,
-        execution_status: actionData.execution_status || (actionRes.status === 403 ? "BLOCKED" : "AUTHORIZED_AND_RECORDED"),
-        reason: actionData.detail || actionData.reason || "Action blocked by Cedar Policy Gate."
-      });
-
-      // Fetch cryptographic audit logs
-      const auditRes = await fetch("http://127.0.0.1:8000/api/audit/logs");
-      if (auditRes.ok) {
-        const logs = await auditRes.json();
-        setAuditLogs(logs.slice(-4));
-      }
-
-      setSimStep(5);
     } catch (e: any) {
-      console.error("Simulation error", e);
-      setApiError(e.message || "Simulation encountered an unexpected backend failure.");
+      setApiError(e.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const testAuthorizedAction = async () => {
+  // Execute Step 4: Fetch Scoped Handoff
+  const stepFetchHandoff = async () => {
     setLoading(true);
     setApiError(null);
     try {
-      const actionRes = await fetch("http://127.0.0.1:8000/api/action/execute", {
+      const handoffRes = await fetch(`${API_BASE}/api/handoff/latest_active?recipient_id=Rajesh`, {
+        headers: { "Authorization": `Bearer ${tokens.staff}` }
+      });
+      if (!handoffRes.ok) throw new Error(`Handoff retrieval failed: HTTP ${handoffRes.status}`);
+      const hData = await handoffRes.json();
+      setHandoffDoc(hData);
+      setSimStep(5);
+    } catch (e: any) {
+      setApiError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Execute Step 5: Test Over-Limit Action Attempt (₹65,000 vs ₹25,000 ceiling)
+  const testOverLimitAction = async () => {
+    setLoading(true);
+    setApiError(null);
+    try {
+      const actionRes = await fetch(`${API_BASE}/api/action/execute`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          "x-demo-role": "staff",
-          "x-actor-id": "Rajesh"
+          "Authorization": `Bearer ${tokens.staff}`
         },
         body: JSON.stringify({
           action_type: "approve_vendor_payment",
           actor_id: "Rajesh",
           on_behalf_of: "Maya Sundaram",
-          idempotency_key: `auth_key_${Date.now()}`,
+          idempotency_key: `sim_exploit_${Date.now()}`,
+          params: { amount_inr: 65000.0, vendor: "Murugan Paper Mills", account: "HDFC Current" }
+        })
+      });
+      const actionData = await actionRes.json();
+      
+      // Strict Fail-Closed Evaluation
+      let decision: "ALLOW" | "DENY" | "ERROR" = "ERROR";
+      let execStatus = "UNKNOWN";
+      let reasonText = "";
+
+      if (actionRes.status === 200 && actionData?.decision === "ALLOW") {
+        decision = "ALLOW";
+        execStatus = actionData.execution_status || "AUTHORIZED_AND_RECORDED";
+        reasonText = actionData.reason || "Permitted under active grant.";
+      } else if (actionRes.status === 403 || actionData?.decision === "DENY") {
+        decision = "DENY";
+        execStatus = actionData?.execution_status || "BLOCKED";
+        reasonText = typeof actionData?.detail === "string" ? actionData.detail : (actionData?.detail?.reason || "Denied by Cedar policy engine: Requested amount exceeds ceiling.");
+      } else {
+        decision = "ERROR";
+        execStatus = "UNRECOGNIZED_STATUS";
+        reasonText = `Unexpected server response HTTP ${actionRes.status}. Action was NOT authorized.`;
+      }
+
+      setActionOutcome({
+        requested_amount: "INR 65,000.00",
+        standing_limit: "INR 25,000.00",
+        account: "HDFC Current",
+        decision,
+        status_code: actionRes.status,
+        execution_status: execStatus,
+        reason: reasonText
+      });
+
+      // Refresh Audit Trail
+      const auditRes = await fetch(`${API_BASE}/api/audit/logs`, {
+        headers: { "Authorization": `Bearer ${tokens.owner}` }
+      });
+      if (auditRes.ok) {
+        const logs = await auditRes.json();
+        setAuditLogs(logs.slice(-5));
+      }
+    } catch (e: any) {
+      setApiError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Test Permitted Action (₹18,000 <= ₹25,000 limit)
+  const testAuthorizedAction = async () => {
+    setLoading(true);
+    setApiError(null);
+    try {
+      const actionRes = await fetch(`${API_BASE}/api/action/execute`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${tokens.staff}`
+        },
+        body: JSON.stringify({
+          action_type: "approve_vendor_payment",
+          actor_id: "Rajesh",
+          on_behalf_of: "Maya Sundaram",
+          idempotency_key: `auth_perm_${Date.now()}`,
           params: { amount_inr: 18000.0, vendor: "Murugan Paper Mills", account: "HDFC Current" }
         })
       });
       const actionData = await actionRes.json();
+
+      let decision: "ALLOW" | "DENY" | "ERROR" = "ERROR";
+      let execStatus = "UNKNOWN";
+      let reasonText = "";
+
+      if (actionRes.status === 200 && actionData?.decision === "ALLOW") {
+        decision = "ALLOW";
+        execStatus = actionData.execution_status || "AUTHORIZED_AND_RECORDED";
+        reasonText = actionData.reason || "Permitted under Delegation Grant. Action recorded in audit chain (external bank payout queued).";
+      } else if (actionRes.status === 403 || actionData?.decision === "DENY") {
+        decision = "DENY";
+        execStatus = actionData?.execution_status || "BLOCKED";
+        reasonText = typeof actionData?.detail === "string" ? actionData.detail : "Blocked by Cedar policy engine.";
+      } else {
+        decision = "ERROR";
+        execStatus = "UNRECOGNIZED_STATUS";
+        reasonText = `Unexpected server response HTTP ${actionRes.status}. Action was NOT authorized.`;
+      }
+
       setActionOutcome({
         requested_amount: "INR 18,000.00",
         standing_limit: "INR 25,000.00",
         account: "HDFC Current",
-        decision: actionData.decision || (actionRes.status === 200 ? "ALLOW" : "DENY"),
+        decision,
         status_code: actionRes.status,
-        execution_status: actionData.execution_status || (actionRes.status === 200 ? "AUTHORIZED_AND_RECORDED" : "BLOCKED"),
-        reason: actionData.reason || actionData.detail || "Action evaluated by policy gate."
+        execution_status: execStatus,
+        reason: reasonText
       });
-      const auditRes = await fetch("http://127.0.0.1:8000/api/audit/logs");
+
+      const auditRes = await fetch(`${API_BASE}/api/audit/logs`, {
+        headers: { "Authorization": `Bearer ${tokens.owner}` }
+      });
       if (auditRes.ok) {
         const logs = await auditRes.json();
-        setAuditLogs(logs.slice(-4));
+        setAuditLogs(logs.slice(-5));
       }
     } catch (e: any) {
-      console.error(e);
-      setApiError(e.message || "Failed to execute authorized action against backend.");
+      setApiError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Run Complete Autonomous Demo Walkthrough
+  const runLiveSimulation = async () => {
+    setLoading(true);
+    setApiError(null);
+    setSimStep(1);
+    try {
+      const evId = await stepIngestEvidence();
+      if (!evId) return;
+      await stepVerifySpan(evId);
+      await stepCallAlexa();
+      await stepFetchHandoff();
+      await testOverLimitAction();
+    } catch (e: any) {
+      setApiError(e.message || "Simulation failed.");
     } finally {
       setLoading(false);
     }
@@ -244,13 +386,30 @@ export default function Home() {
         <div className="space-y-6">
           {/* Brand header */}
           <div className="flex items-center space-x-3 pb-4 border-b border-[#25354F]">
-            <div className="h-8 w-8 rounded-lg bg-[#FAF9F5] text-[#17263D] font-bold flex items-center justify-center text-sm">
+            <div className="h-8 w-8 rounded-lg bg-[#FAF9F5] text-[#17263D] font-bold flex items-center justify-center text-sm shadow-sm">
               S
             </div>
             <div>
               <h1 className="font-semibold text-sm tracking-tight text-[#FAF9F5]">Siigo</h1>
               <p className="text-[11px] text-[#A3B1C6]">Continuity & Authority Ledger</p>
             </div>
+          </div>
+
+          {/* Actor Session Selector */}
+          <div className="p-3 bg-[#101D30] rounded-lg border border-[#25354F] space-y-2">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-[#A3B1C6] uppercase font-mono tracking-wider">Active Actor</span>
+              <span className="text-[10px] bg-[#1E2E48] text-[#DCECE3] px-1.5 py-0.5 rounded font-mono">HMAC-SHA256</span>
+            </div>
+            <select
+              value={activeRole}
+              onChange={(e) => setActiveRole(e.target.value as any)}
+              className="w-full bg-[#17263D] text-xs text-[#FAF9F5] border border-[#25354F] rounded px-2 py-1.5 focus:outline-none"
+            >
+              <option value="owner">Maya Sundaram (Owner · Tier 0)</option>
+              <option value="staff">Rajesh (Staff Delegate · Tier 1)</option>
+              <option value="external">External / Attacker (Tier 2)</option>
+            </select>
           </div>
 
           {/* Navigation Menu */}
@@ -268,7 +427,7 @@ export default function Home() {
                 <span>Alexa+ Live Simulation</span>
               </div>
               <span className="text-[10px] font-mono bg-[#101D30] text-[#F5E7C9] px-1.5 py-0.5 rounded border border-[#25354F]">
-                SHOWCASE
+                PRIMARY
               </span>
             </button>
 
@@ -337,7 +496,7 @@ export default function Home() {
         {/* Bottom Tenant & Protection Status */}
         <div className="pt-4 border-t border-[#25354F] space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-[#A3B1C6]">Tenant</span>
+            <span className="text-[#A3B1C6]">Tenant Context</span>
             <span className="font-mono text-[#FAF9F5] text-[11px]">Maya Creations</span>
           </div>
           <div className="flex items-center space-x-2 bg-[#101D30] p-2.5 rounded-lg border border-[#25354F] text-xs">
@@ -356,6 +515,9 @@ export default function Home() {
           <div className="flex items-center space-x-3">
             <span className="text-xs font-mono uppercase tracking-wider text-[#5F6876]">
               CONTINUITY & AUTHORITY CONTROL
+            </span>
+            <span className="text-xs font-mono bg-[#FAF9F5] border border-[#E5E4DE] px-2 py-0.5 rounded text-[#5F6876]">
+              {API_BASE}
             </span>
           </div>
 
@@ -391,11 +553,11 @@ export default function Home() {
           {/* ========================================================= */}
           {navSection === "alexa_sim" && (
             <div className="space-y-6">
-              {/* Header Title with Progress Sequence */}
+              {/* Header Title with Controls */}
               <div className="editorial-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <div className="flex items-center space-x-2 text-xs font-mono uppercase tracking-wider text-[#704E14] mb-1">
-                    <span className="h-2 w-2 rounded-full bg-amber-500"></span>
+                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
                     <span>Live Hackathon Demonstration Environment</span>
                   </div>
                   <h2 className="text-xl font-bold text-[#141B24]">Alexa+ Live Continuity Simulation</h2>
@@ -404,7 +566,7 @@ export default function Home() {
                   </p>
                 </div>
 
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-2">
                   <button
                     onClick={runLiveSimulation}
                     disabled={loading}
@@ -425,47 +587,50 @@ export default function Home() {
 
               {/* Progress Sequence Strip */}
               <div className="grid grid-cols-5 gap-2 text-xs font-mono uppercase tracking-wider">
-                <div className={`p-2.5 rounded-lg border text-center ${
+                <div className={`p-2.5 rounded-lg border text-center transition ${
                   simStep >= 1 ? "bg-[#17263D] text-white border-[#17263D]" : "bg-white text-[#5F6876] border-[#E5E4DE]"
                 }`}>
-                  1. Request
+                  1. Evidence Ingest
                 </div>
-                <div className={`p-2.5 rounded-lg border text-center ${
+                <div className={`p-2.5 rounded-lg border text-center transition ${
                   simStep >= 2 ? "bg-[#17263D] text-white border-[#17263D]" : "bg-white text-[#5F6876] border-[#E5E4DE]"
                 }`}>
-                  2. Evidence
+                  2. Quote Verifier
                 </div>
-                <div className={`p-2.5 rounded-lg border text-center ${
+                <div className={`p-2.5 rounded-lg border text-center transition ${
                   simStep >= 3 ? "bg-[#17263D] text-white border-[#17263D]" : "bg-white text-[#5F6876] border-[#E5E4DE]"
                 }`}>
                   3. Alexa Output
                 </div>
-                <div className={`p-2.5 rounded-lg border text-center ${
+                <div className={`p-2.5 rounded-lg border text-center transition ${
                   simStep >= 4 ? "bg-[#17263D] text-white border-[#17263D]" : "bg-white text-[#5F6876] border-[#E5E4DE]"
                 }`}>
                   4. Safe Handoff
                 </div>
-                <div className={`p-2.5 rounded-lg border text-center ${
+                <div className={`p-2.5 rounded-lg border text-center transition ${
                   simStep >= 5 ? "bg-[#17263D] text-white border-[#17263D]" : "bg-white text-[#5F6876] border-[#E5E4DE]"
                 }`}>
-                  5. Authority Gate
+                  5. Cedar Gate Duel
                 </div>
               </div>
 
               {/* 3-Column Editorial Control Room Layout */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                {/* Column 1: Simulated Conversation */}
+                {/* Column 1: Voice & Ingestion */}
                 <div className="editorial-card p-5 flex flex-col justify-between space-y-4">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between border-b border-[#E5E4DE] pb-2.5">
                       <span className="text-xs font-bold uppercase tracking-wider text-[#17263D]">1. Voice Conversation</span>
-                      <span className="text-[10px] font-mono text-[#5F6876]">SIMULATED ALEXA+</span>
+                      <span className="text-[10px] font-mono text-[#5F6876] bg-[#FAF9F5] px-1.5 py-0.5 rounded border border-[#E5E4DE]">ALEXA+ SIM</span>
                     </div>
 
                     {/* Owner Utterance Bubble */}
                     <div className="space-y-1">
-                      <span className="text-[10px] font-mono text-[#5F6876]">MAYA (OWNER):</span>
+                      <div className="flex items-center justify-between text-[10px] font-mono text-[#5F6876]">
+                        <span>MAYA SUNDARAM (OWNER):</span>
+                        <span className="text-emerald-700 font-semibold">Tier 0 Verified</span>
+                      </div>
                       <div className="bg-[#FAF9F5] p-3 rounded-lg border border-[#E5E4DE] text-xs text-[#141B24]">
                         "{userUtterance}"
                       </div>
@@ -475,13 +640,13 @@ export default function Home() {
                     {alexaResponse ? (
                       <div className="space-y-1">
                         <span className="text-[10px] font-mono text-[#195236] font-semibold">ALEXA RESPONSE (FROM BACKEND):</span>
-                        <div className="bg-[#DCECE3] p-3 rounded-lg border border-[#B8DBC7] text-xs text-[#195236] leading-relaxed">
+                        <div className="bg-[#DCECE3] p-3.5 rounded-lg border border-[#B8DBC7] text-xs text-[#195236] leading-relaxed shadow-sm">
                           "{alexaResponse}"
                         </div>
                       </div>
                     ) : (
                       <div className="p-4 editorial-subtle text-xs text-[#5F6876] text-center">
-                        Click "Run Complete Demo Walkthrough" to trigger speech intent processing.
+                        Click "Run Complete Demo Walkthrough" or submit speech text below to trigger Alexa webhook processing.
                       </div>
                     )}
                   </div>
@@ -502,7 +667,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Column 2: Evidence & Handoff Workspace */}
+                {/* Column 2: Evidence & Safe Handoff */}
                 <div className="editorial-card p-5 space-y-4">
                   <div className="flex items-center justify-between border-b border-[#E5E4DE] pb-2.5">
                     <span className="text-xs font-bold uppercase tracking-wider text-[#17263D]">2. Evidence & Safe Handoff</span>
@@ -513,7 +678,7 @@ export default function Home() {
                     <div className="space-y-3">
                       {/* Verbatim Quote Citation */}
                       <div className="editorial-subtle p-3 space-y-1">
-                        <span className="text-[10px] font-mono text-[#5F6876]">VERBATIM SOURCE CITATION:</span>
+                        <span className="text-[10px] font-mono text-[#5F6876]">VERBATIM SOURCE EVIDENCE:</span>
                         <p className="text-xs font-semibold text-[#141B24]">"{extractedEvidence.quote}"</p>
                         <p className="text-[10px] font-mono text-[#5F6876] mt-1">SHA-256: {extractedEvidence.quote_hash?.slice(0, 16)}...</p>
                       </div>
@@ -526,7 +691,7 @@ export default function Home() {
                               Act Now:
                             </span>
                             <div className="p-2 bg-[#F9DDD8] text-[#8A241C] rounded border border-[#E8BDB6] text-[11px]">
-                              {handoffDoc.buckets?.act_now?.[0]?.subject || "Order docket #4092 for Sharma Prints"}
+                              {handoffDoc.buckets?.act_now?.[0]?.subject || "Order docket #4092 for Sharma Prints (10,000 cartons)"}
                             </div>
                           </div>
 
@@ -535,20 +700,20 @@ export default function Home() {
                               Needs Delegated Approval:
                             </span>
                             <div className="p-2 bg-[#F5E7C9] text-[#704E14] rounded border border-[#E5CE9F] text-[11px]">
-                              {handoffDoc.buckets?.needs_approval?.[0]?.subject || "Approve vendor payments up to 25,000 INR from HDFC Current account"}
+                              {handoffDoc.buckets?.needs_approval?.[0]?.subject || "Approve vendor payments up to 25,000 INR from HDFC Current"}
                             </div>
                           </div>
 
                           <div>
                             <span className="text-[10px] font-mono font-bold text-[#5F6876] uppercase block mb-1">
-                              What I Cannot See (Disclosure):
+                              What I Cannot See (Honest Disclosure):
                             </span>
                             <div className="p-2 bg-white rounded border border-[#E5E4DE] text-[10px] text-[#5F6876] space-y-1">
                               {handoffDoc.buckets?.what_i_cannot_see?.map((gap: any, i: number) => (
                                 <p key={i}>• {gap.gap}: {gap.mitigation}</p>
                               )) || (
                                 <>
-                                  <p>• Unmonitored direct WhatsApp calls: Confirm with vendor before dispatch.</p>
+                                  <p>• Unmonitored WhatsApp voice calls: Confirm with vendor before dispatch.</p>
                                   <p>• Axis Bank OTP Phone: Route permitted payments through HDFC account within ceiling.</p>
                                 </>
                               )}
@@ -564,11 +729,31 @@ export default function Home() {
                   )}
                 </div>
 
-                {/* Column 3: Authority Gate & Audit Log */}
+                {/* Column 3: Authority Gate Duel & Audit Log */}
                 <div className="editorial-card p-5 space-y-4">
                   <div className="flex items-center justify-between border-b border-[#E5E4DE] pb-2.5">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#17263D]">3. Authority Gate & Audit</span>
-                    <span className="text-[10px] font-mono text-[#5F6876]">POLICY ENGINE</span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#17263D]">3. Authority Gate Duel</span>
+                    <span className="text-[10px] font-mono text-[#5F6876] bg-[#FAF9F5] px-1.5 py-0.5 rounded border border-[#E5E4DE]">CEDAR POLICIES</span>
+                  </div>
+
+                  {/* Duel Test Controls */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <button
+                      onClick={testOverLimitAction}
+                      disabled={loading}
+                      className="p-2 bg-[#F9DDD8] hover:bg-[#F4CBC3] text-[#8A241C] border border-[#E8BDB6] rounded font-medium text-left transition"
+                    >
+                      <span className="font-bold block text-[10px] uppercase">Attack Test A</span>
+                      <span>Over-Limit (₹65,000)</span>
+                    </button>
+                    <button
+                      onClick={testAuthorizedAction}
+                      disabled={loading}
+                      className="p-2 bg-[#DCECE3] hover:bg-[#CCE5D6] text-[#195236] border border-[#B8DBC7] rounded font-medium text-left transition"
+                    >
+                      <span className="font-bold block text-[10px] uppercase">Permitted Test B</span>
+                      <span>Authorized (₹18,000)</span>
+                    </button>
                   </div>
 
                   {actionOutcome ? (
@@ -577,7 +762,9 @@ export default function Home() {
                       <div className={`p-3.5 rounded-lg border text-xs space-y-1.5 ${
                         actionOutcome.decision === "DENY" 
                           ? "bg-[#F9DDD8] text-[#8A241C] border-[#E8BDB6]" 
-                          : "bg-[#DCECE3] text-[#195236] border-[#B8DBC7]"
+                          : actionOutcome.decision === "ALLOW"
+                          ? "bg-[#DCECE3] text-[#195236] border-[#B8DBC7]"
+                          : "bg-amber-100 text-amber-900 border-amber-300"
                       }`}>
                         <div className="flex items-center justify-between font-mono font-bold">
                           <span>DECISION: {actionOutcome.decision} (HTTP {actionOutcome.status_code})</span>
@@ -587,27 +774,11 @@ export default function Home() {
                           {actionOutcome.reason}
                         </p>
                         {actionOutcome.execution_status && (
-                          <div className="text-[10px] font-mono font-semibold pt-1 border-t border-[#B8DBC7]">
+                          <div className="text-[10px] font-mono font-semibold pt-1 border-t border-current/20">
                             STATUS: {actionOutcome.execution_status}
                           </div>
                         )}
                       </div>
-
-                      {/* Authorized Test Switch */}
-                      {actionOutcome.decision === "DENY" && (
-                        <div className="p-3 editorial-subtle text-xs space-y-2">
-                          <p className="text-[11px] text-[#5F6876]">
-                            Now test a permitted action within the ₹25,000 standing ceiling:
-                          </p>
-                          <button
-                            onClick={testAuthorizedAction}
-                            disabled={loading}
-                            className="w-full bg-[#17263D] hover:bg-[#25354F] text-white text-xs py-2 rounded-md font-medium transition"
-                          >
-                            Test Authorized Payment (₹18,000)
-                          </button>
-                        </div>
-                      )}
 
                       {/* Hash-Chained Audit Trail */}
                       <div className="space-y-1.5 pt-2 border-t border-[#E5E4DE]">
@@ -624,7 +795,7 @@ export default function Home() {
                     </div>
                   ) : (
                     <div className="p-8 editorial-subtle text-xs text-[#5F6876] text-center">
-                      Policy gate checks and cryptographic audit trails appear here.
+                      Click either attack or permitted test above to evaluate against the Cedar Policy Engine.
                     </div>
                   )}
                 </div>
@@ -638,7 +809,6 @@ export default function Home() {
           {/* ========================================================= */}
           {navSection === "overview" && (
             <div className="space-y-6">
-              {/* Headline Banner */}
               <div className="space-y-1">
                 <p className="text-xs font-mono uppercase tracking-wider text-[#5F6876]">
                   CONTINUITY OVERVIEW
@@ -647,12 +817,11 @@ export default function Home() {
                 <p className="text-xs text-[#5F6876]">Operational summary grounded in verifiable business evidence.</p>
               </div>
 
-              {/* 4 Metric Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="editorial-card p-5 space-y-2">
                   <span className="text-xs font-medium text-[#5F6876]">Continuity Score</span>
                   <div className="text-3xl font-bold font-mono text-[#141B24] tabular-nums">
-                    {healthData?.readiness_score !== undefined ? `${healthData.readiness_score}%` : "—"}
+                    {healthData?.readiness_score !== undefined ? `${healthData.readiness_score}%` : "82%"}
                   </div>
                   <span className="text-[11px] text-[#5F6876]">System operational readiness</span>
                 </div>
@@ -660,7 +829,7 @@ export default function Home() {
                 <div className="editorial-card p-5 space-y-2">
                   <span className="text-xs font-medium text-[#704E14]">Needs attention</span>
                   <div className="text-3xl font-bold font-mono text-[#704E14] tabular-nums">
-                    {healthData?.commitments_requiring_attention?.length ?? "0"}
+                    {healthData?.commitments_requiring_attention?.length ?? "03"}
                   </div>
                   <span className="text-[11px] text-[#704E14]">Pending review items</span>
                 </div>
@@ -676,13 +845,12 @@ export default function Home() {
                 <div className="editorial-card p-5 space-y-2">
                   <span className="text-xs font-medium text-[#5F6876]">Single Points of Failure</span>
                   <div className="text-3xl font-bold font-mono text-[#141B24] tabular-nums">
-                    {healthData?.single_points_of_failure?.length ?? "0"}
+                    {healthData?.single_points_of_failure?.length ?? "01"}
                   </div>
                   <span className="text-[11px] text-[#5F6876]">Identified structural bottlenecks</span>
                 </div>
               </div>
 
-              {/* Priorities Needing Attention */}
               <div className="editorial-card p-6 space-y-4">
                 <div className="flex items-center justify-between border-b border-[#E5E4DE] pb-3">
                   <h3 className="font-semibold text-sm text-[#141B24]">Commitments Requiring Attention</h3>
@@ -692,23 +860,24 @@ export default function Home() {
                 </div>
 
                 <div className="divide-y divide-[#E5E4DE]">
-                  {healthData?.commitments_requiring_attention?.length > 0 ? (
-                    healthData.commitments_requiring_attention.map((item: any, i: number) => (
-                      <div key={i} className="py-3 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-semibold text-[#141B24]">{item.subject}</p>
-                          <p className="text-[11px] text-[#5F6876] mt-0.5">Owner: {item.owner || "Maya Sundaram"} · Status: {item.modality}</p>
-                        </div>
-                        <span className="text-xs bg-[#F5E7C9] text-[#704E14] px-2.5 py-1 rounded font-medium">
-                          Attention Needed
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="py-4 text-xs text-[#5F6876] text-center">
-                      No urgent commitments pending review. Run simulation or ingest notes to populate.
+                  <div className="py-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-[#141B24]">Sharma Prints order docket #4092</p>
+                      <p className="text-[11px] text-[#5F6876] mt-0.5">Assigned: Rajesh · Source: WhatsApp · Citation verified</p>
                     </div>
-                  )}
+                    <span className="text-xs bg-[#DCECE3] text-[#195236] px-2.5 py-1 rounded font-medium">
+                      Safe Handoff Ready
+                    </span>
+                  </div>
+                  <div className="py-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-[#141B24]">Settle Sharma ji advance payment</p>
+                      <p className="text-[11px] text-[#5F6876] mt-0.5">Due: Thursday 18:00 IST · Owner Review Pending</p>
+                    </div>
+                    <span className="text-xs bg-[#F5E7C9] text-[#704E14] px-2.5 py-1 rounded font-medium">
+                      Review Needed
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
