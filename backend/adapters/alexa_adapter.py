@@ -63,10 +63,13 @@ def handle_alexa_request(db: Session, tenant_id: str, request_body: Dict[str, An
             needs_approval_count = len(handoff["buckets"]["needs_approval"])
             cannot_see_count = len(handoff["buckets"]["what_i_cannot_see"])
 
+            commitment_word = "commitment" if act_now_count == 1 else "commitments"
+            approval_word = "item" if needs_approval_count == 1 else "items"
+
             speech_output = (
                 f"Absence recorded for tomorrow under your Continuity Charter. "
-                f"I've generated a Safe Handoff for Rajesh with {act_now_count} immediate commitments, "
-                f"{needs_approval_count} items requiring delegated approval, and flagged {cannot_see_count} coverage gaps."
+                f"I've generated a Safe Handoff for Rajesh with {act_now_count} immediate {commitment_word}, "
+                f"{needs_approval_count} {approval_word} requiring delegated approval, and flagged {cannot_see_count} coverage gaps."
             )
 
         elif intent_name == "ReadReadinessScoreIntent":

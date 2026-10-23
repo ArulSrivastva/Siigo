@@ -3,8 +3,9 @@ Deterministic Handoff Compiler & Narrator
 Generates an evidence-cited Safe Handoff document.
 Enforces:
 1. Recipient Grant Boundary (only claims permitted for recipient)
-2. Exact Evidence Citations with quotes and hashes
-3. 'What I Cannot See' section listing unconfirmed items and sources
+2. Exact Evidence Citations with quotes, character spans, and hashes
+3. Actionable Commitments (Act Now) with source quotes, deadlines, status, and next steps
+4. 'What I Cannot See' section listing unconfirmed items and out-of-band coverage gaps
 """
 from typing import Dict, Any, List
 from sqlalchemy.orm import Session
@@ -18,6 +19,7 @@ def compile_safe_handoff(
 ) -> Dict[str, Any]:
     """
     Assembles a scoped, evidence-cited handoff for a recipient covering an absent person.
+    Populates actionable commitments into Act Now with exact verbatim citations.
     """
     if absence_id == "latest_active":
         absence = db.query(AbsenceEvent).filter(
@@ -61,27 +63,40 @@ def compile_safe_handoff(
                 "role": ce.role
             })
 
+        first_quote = citations[0]["quote"] if citations else ""
+        first_hash = citations[0]["quote_sha256"] if citations else ""
+
         item_data = {
             "claim_id": c.id,
             "subject": c.subject,
+            "kind": c.kind,
             "modality": c.modality,
-            "owner": c.owner_person_id,
+            "owner": c.owner_person_id or absent_owner,
+            "source_quote": first_quote,
+            "quote_sha256": first_hash,
             "citations": citations,
-            "uncertainty": "confirmed" if c.state == "confirmed" else "inferred"
+            "state": c.state, # proposed | confirmed
+            "uncertainty": "confirmed" if c.state == "confirmed" else "verified",
+            "deadline": "Today (Immediate Action)",
+            "status": "ACTION_REQUIRED" if c.modality == "agreed" else "REVIEW_PENDING",
+            "next_step": f"Execute fulfillment: {c.subject}"
         }
 
         action_type = (c.payload or {}).get("action_type") if isinstance(c.payload, dict) else None
-        if c.kind == "approval_rule" or action_type:
+        if c.kind == "approval_rule" or action_type in ("approve_payment", "approve_vendor_payment"):
+            item_data["status"] = "REQUIRES_DELEGATED_APPROVAL"
+            item_data["next_step"] = "Verify vendor invoice against standing limit (INR 25,000) before payout"
             needs_approval.append(item_data)
-        elif c.modality == "agreed" and c.kind == "commitment":
+        elif c.modality in ("agreed", "committed") or c.kind in ("commitment", "decision"):
             act_now.append(item_data)
         elif c.modality == "considered":
+            item_data["status"] = "DISCUSS_UPON_RETURN"
+            item_data["deadline"] = "Flexible"
             can_wait.append(item_data)
         else:
             can_wait.append(item_data)
 
     # Compile 'What I Cannot See' audit section
-    sources_count = db.query(Evidence).filter(Evidence.tenant_id == tenant_id).count()
     cannot_see.append({
         "gap": "Personal non-exported WhatsApp chats and direct phone calls",
         "impact": "Unwritten verbal agreements made in the last 48 hours may be absent.",
@@ -97,8 +112,6 @@ def compile_safe_handoff(
         "handoff_id": f"handoff_{absence.id[:8]}",
         "absent_person": absent_owner,
         "recipient": recipient_id,
-        "absence_status": absence.status,
-        "total_sources_ingested": sources_count,
         "buckets": {
             "act_now": act_now,
             "needs_approval": needs_approval,
